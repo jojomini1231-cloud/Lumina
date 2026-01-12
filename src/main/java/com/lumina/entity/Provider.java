@@ -5,8 +5,8 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("channels")
-public class Channel {
+@TableName("providers")
+public class Provider {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String name;

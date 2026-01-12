@@ -11,7 +11,7 @@ public class StatsModel {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String modelName;
-    private Long channelId;
+    private Long providerId;
     private Long inputTokens;
     private Long outputTokens;
     private BigDecimal inputCost;

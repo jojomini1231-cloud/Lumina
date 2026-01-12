@@ -23,12 +23,12 @@ CREATE TABLE `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
 -- ============================================
--- 2. 渠道表
+-- 2. 供应商表
 -- ============================================
-CREATE TABLE `channels` (
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '渠道ID',
-    `name` VARCHAR(100) NOT NULL COMMENT '渠道名称',
-    `type` TINYINT NOT NULL COMMENT '渠道类型：0-OpenAI Chat, 1-OpenAI Response, 2-Anthropic, 3-Gemini, 4-Volcengine',
+CREATE TABLE `providers` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '供应商ID',
+    `name` VARCHAR(100) NOT NULL COMMENT '供应商名称',
+    `type` TINYINT NOT NULL COMMENT '供应商类型：0-OpenAI Chat, 1-OpenAI Response, 2-Anthropic, 3-Gemini, 4-Volcengine',
     `is_enabled` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用：0-禁用，1-启用',
     `base_url_list` JSON NOT NULL COMMENT 'Base URL列表，格式：[{"url":"https://api.openai.com/v1","delay":0}]',
     `model_name` VARCHAR(100) DEFAULT NULL COMMENT '模型名称',
@@ -38,21 +38,21 @@ CREATE TABLE `channels` (
     `auto_group_mode` TINYINT NOT NULL DEFAULT 0 COMMENT '自动分组模式：0-不自动，1-模糊，2-精确，3-正则',
     `custom_headers` JSON DEFAULT NULL COMMENT '自定义请求头，格式：{"key":"value"}',
     `param_override` TEXT DEFAULT NULL COMMENT '参数覆盖配置',
-    `proxy_url` VARCHAR(255) DEFAULT NULL COMMENT '渠道专用代理地址',
+    `proxy_url` VARCHAR(255) DEFAULT NULL COMMENT '供应商专用代理地址',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_name` (`name`),
     KEY `idx_type` (`type`),
     KEY `idx_enabled` (`is_enabled`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='渠道表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='供应商表';
 
 -- ============================================
--- 3. 渠道密钥表
+-- 3. 供应商密钥表
 -- ============================================
-CREATE TABLE `channel_keys` (
+CREATE TABLE `provider_keys` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '密钥ID',
-    `channel_id` BIGINT UNSIGNED NOT NULL COMMENT '渠道ID',
+    `provider_id` BIGINT UNSIGNED NOT NULL COMMENT '供应商ID',
     `is_enabled` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用：0-禁用，1-启用',
     `api_key` VARCHAR(255) NOT NULL COMMENT 'API密钥',
     `status_code` INT DEFAULT NULL COMMENT '状态码（如429表示限流）',
@@ -61,10 +61,10 @@ CREATE TABLE `channel_keys` (
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
-    KEY `idx_channel_id` (`channel_id`),
+    KEY `idx_provider_id` (`provider_id`),
     KEY `idx_enabled` (`is_enabled`),
-    CONSTRAINT `fk_channel_keys_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='渠道密钥表';
+    CONSTRAINT `fk_provider_keys_provider` FOREIGN KEY (`provider_id`) REFERENCES `providers` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='供应商密钥表';
 
 -- ============================================
 -- 4. 分组表
@@ -87,18 +87,18 @@ CREATE TABLE `groups` (
 CREATE TABLE `group_items` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '项目ID',
     `group_id` BIGINT UNSIGNED NOT NULL COMMENT '分组ID',
-    `channel_id` BIGINT UNSIGNED NOT NULL COMMENT '渠道ID',
+    `provider_id` BIGINT UNSIGNED NOT NULL COMMENT '供应商ID',
     `model_name` VARCHAR(100) NOT NULL COMMENT '模型名称',
     `priority` INT NOT NULL DEFAULT 0 COMMENT '优先级（数字越大优先级越高）',
     `weight` INT NOT NULL DEFAULT 1 COMMENT '权重（用于加权负载均衡）',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_group_channel_model` (`group_id`, `channel_id`, `model_name`),
+    UNIQUE KEY `uk_group_provider_model` (`group_id`, `provider_id`, `model_name`),
     KEY `idx_group_id` (`group_id`),
-    KEY `idx_channel_id` (`channel_id`),
+    KEY `idx_provider_id` (`provider_id`),
     CONSTRAINT `fk_group_items_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE,
-    CONSTRAINT `fk_group_items_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE CASCADE
+    CONSTRAINT `fk_group_items_provider` FOREIGN KEY (`provider_id`) REFERENCES `providers` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分组项目表';
 
 -- ============================================
@@ -151,8 +151,8 @@ CREATE TABLE `request_logs` (
     `id` BIGINT UNSIGNED NOT NULL COMMENT '日志ID（Snowflake ID）',
     `request_time` BIGINT NOT NULL COMMENT '请求时间戳（秒）',
     `request_model_name` VARCHAR(100) NOT NULL COMMENT '请求的模型名称',
-    `channel_id` BIGINT UNSIGNED NOT NULL COMMENT '实际使用的渠道ID',
-    `channel_name` VARCHAR(100) NOT NULL COMMENT '渠道名称',
+    `provider_id` BIGINT UNSIGNED NOT NULL COMMENT '实际使用的渠道ID',
+    `provider_name` VARCHAR(100) NOT NULL COMMENT '供应商名称',
     `actual_model_name` VARCHAR(100) NOT NULL COMMENT '实际使用的模型名称',
     `input_tokens` INT NOT NULL DEFAULT 0 COMMENT '输入Token数',
     `output_tokens` INT NOT NULL DEFAULT 0 COMMENT '输出Token数',
@@ -165,7 +165,7 @@ CREATE TABLE `request_logs` (
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     KEY `idx_request_time` (`request_time`),
-    KEY `idx_channel_id` (`channel_id`),
+    KEY `idx_provider_id` (`provider_id`),
     KEY `idx_request_model` (`request_model_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='请求日志表';
 
@@ -225,7 +225,7 @@ CREATE TABLE `stats_daily` (
 CREATE TABLE `stats_model` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '统计ID',
     `model_name` VARCHAR(100) NOT NULL COMMENT '模型名称',
-    `channel_id` BIGINT UNSIGNED NOT NULL COMMENT '渠道ID',
+    `provider_id` BIGINT UNSIGNED NOT NULL COMMENT '供应商ID',
     `input_tokens` BIGINT NOT NULL DEFAULT 0 COMMENT '输入Token总数',
     `output_tokens` BIGINT NOT NULL DEFAULT 0 COMMENT '输出Token总数',
     `input_cost` DECIMAL(12, 4) NOT NULL DEFAULT 0.0000 COMMENT '输入成本',
@@ -235,16 +235,16 @@ CREATE TABLE `stats_model` (
     `request_failed_count` BIGINT NOT NULL DEFAULT 0 COMMENT '失败请求数',
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_model_channel` (`model_name`, `channel_id`),
+    UNIQUE KEY `uk_model_provider` (`model_name`, `provider_id`),
     KEY `idx_model_name` (`model_name`),
-    KEY `idx_channel_id` (`channel_id`)
+    KEY `idx_provider_id` (`provider_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='模型统计表';
 
 -- ============================================
--- 14. 渠道统计表
+-- 14. 供应商统计表
 -- ============================================
-CREATE TABLE `stats_channel` (
-    `channel_id` BIGINT UNSIGNED NOT NULL COMMENT '渠道ID',
+CREATE TABLE `stats_provider` (
+    `provider_id` BIGINT UNSIGNED NOT NULL COMMENT '供应商ID',
     `input_tokens` BIGINT NOT NULL DEFAULT 0 COMMENT '输入Token总数',
     `output_tokens` BIGINT NOT NULL DEFAULT 0 COMMENT '输出Token总数',
     `input_cost` DECIMAL(12, 4) NOT NULL DEFAULT 0.0000 COMMENT '输入成本',
@@ -253,9 +253,9 @@ CREATE TABLE `stats_channel` (
     `request_success_count` BIGINT NOT NULL DEFAULT 0 COMMENT '成功请求数',
     `request_failed_count` BIGINT NOT NULL DEFAULT 0 COMMENT '失败请求数',
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (`channel_id`),
-    CONSTRAINT `fk_stats_channel` FOREIGN KEY (`channel_id`) REFERENCES `channels` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='渠道统计表';
+    PRIMARY KEY (`provider_id`),
+    CONSTRAINT `fk_stats_provider` FOREIGN KEY (`provider_id`) REFERENCES `providers` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='供应商统计表';
 
 -- ============================================
 -- 15. API密钥统计表

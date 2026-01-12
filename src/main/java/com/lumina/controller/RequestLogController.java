@@ -52,10 +52,10 @@ public class RequestLogController {
         return ApiResponse.success(page);
     }
 
-    @GetMapping("/channel/{channelId}")
-    public ApiResponse<List<RequestLog>> getLogsByChannelId(@PathVariable Long channelId) {
+    @GetMapping("/provider/{providerId}")
+    public ApiResponse<List<RequestLog>> getLogsByProviderId(@PathVariable Long providerId) {
         QueryWrapper<RequestLog> wrapper = new QueryWrapper<>();
-        wrapper.eq("channel_id", channelId);
+        wrapper.eq("provider_id", providerId);
         wrapper.orderByDesc("request_time");
         List<RequestLog> logs = requestLogService.list(wrapper);
         return ApiResponse.success(logs);

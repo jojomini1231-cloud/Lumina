@@ -6,10 +6,10 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("stats_channel")
-public class StatsChannel {
+@TableName("stats_provider")
+public class StatsProvider {
     @TableId(type = IdType.INPUT)
-    private Long channelId;
+    private Long providerId;
     private Long inputTokens;
     private Long outputTokens;
     private BigDecimal inputCost;

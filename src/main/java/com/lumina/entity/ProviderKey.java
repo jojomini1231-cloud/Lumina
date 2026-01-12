@@ -6,11 +6,11 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("channel_keys")
-public class ChannelKey {
+@TableName("provider_keys")
+public class ProviderKey {
     @TableId(type = IdType.AUTO)
     private Long id;
-    private Long channelId;
+    private Long providerId;
     private Boolean isEnabled;
     private String apiKey;
     private Integer statusCode;

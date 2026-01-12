@@ -23,7 +23,7 @@ public class StatsController {
     @Autowired
     private StatsModelService statsModelService;
     @Autowired
-    private StatsChannelService statsChannelService;
+    private StatsProviderService statsProviderService;
     @Autowired
     private StatsApiKeyService statsApiKeyService;
 
@@ -60,11 +60,11 @@ public class StatsController {
         return ApiResponse.success(stats);
     }
 
-    @GetMapping("/channel/{channelId}")
-    public ApiResponse<StatsChannel> getChannelStats(@PathVariable Long channelId) {
-        StatsChannel stats = statsChannelService.getById(channelId);
+    @GetMapping("/provider/{providerId}")
+    public ApiResponse<StatsProvider> getProviderStats(@PathVariable Long providerId) {
+        StatsProvider stats = statsProviderService.getById(providerId);
         if (stats == null) {
-            throw new IllegalArgumentException("StatsChannel not found with id: " + channelId);
+            throw new IllegalArgumentException("StatsProvider not found with id: " + providerId);
         }
         return ApiResponse.success(stats);
     }
@@ -84,9 +84,9 @@ public class StatsController {
         return ApiResponse.success(stats);
     }
 
-    @GetMapping("/all-channels")
-    public ApiResponse<List<StatsChannel>> getAllChannelStats() {
-        List<StatsChannel> stats = statsChannelService.list();
+    @GetMapping("/all-providers")
+    public ApiResponse<List<StatsProvider>> getAllProviderStats() {
+        List<StatsProvider> stats = statsProviderService.list();
         return ApiResponse.success(stats);
     }
 

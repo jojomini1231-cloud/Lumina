@@ -10,7 +10,7 @@ public class GroupItem {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long groupId;
-    private Long channelId;
+    private Long providerId;
     private String modelName;
     private Integer priority;
     private Integer weight;

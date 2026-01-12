@@ -80,10 +80,10 @@ public class GroupItemController {
         return ApiResponse.success(groupItems);
     }
 
-    @GetMapping("/channel/{channelId}")
-    public ApiResponse<List<GroupItem>> getGroupItemsByChannelId(@PathVariable Long channelId) {
+    @GetMapping("/provider/{providerId}")
+    public ApiResponse<List<GroupItem>> getGroupItemsByProviderId(@PathVariable Long providerId) {
         QueryWrapper<GroupItem> wrapper = new QueryWrapper<>();
-        wrapper.eq("channel_id", channelId);
+        wrapper.eq("provider_id", providerId);
         List<GroupItem> groupItems = groupItemService.list(wrapper);
         return ApiResponse.success(groupItems);
     }

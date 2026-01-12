@@ -12,8 +12,8 @@ public class RequestLog {
     private Long id;
     private Long requestTime;
     private String requestModelName;
-    private Long channelId;
-    private String channelName;
+    private Long providerId;
+    private String providerName;
     private String actualModelName;
     private Integer inputTokens;
     private Integer outputTokens;
