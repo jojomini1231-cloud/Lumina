@@ -69,7 +69,7 @@ CREATE TABLE `provider_keys` (
 -- ============================================
 -- 4. 分组表
 -- ============================================
-CREATE TABLE `groups` (
+CREATE TABLE `model_groups` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '分组ID',
     `name` VARCHAR(100) NOT NULL COMMENT '分组名称（对外暴露的模型名）',
     `balance_mode` TINYINT NOT NULL COMMENT '负载均衡模式：1-轮询，2-随机，3-故障转移，4-加权',
@@ -84,7 +84,7 @@ CREATE TABLE `groups` (
 -- ============================================
 -- 5. 分组项目表
 -- ============================================
-CREATE TABLE `group_items` (
+CREATE TABLE `model_group_items` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '项目ID',
     `group_id` BIGINT UNSIGNED NOT NULL COMMENT '分组ID',
     `provider_id` BIGINT UNSIGNED NOT NULL COMMENT '供应商ID',

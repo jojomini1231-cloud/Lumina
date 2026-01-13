@@ -1,23 +1,39 @@
 package com.lumina.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @TableName("providers")
 public class Provider {
     @TableId(type = IdType.AUTO)
     private Long id;
+
+    @NotEmpty(message = "名称不能为空")
     private String name;
+
+    @NotNull(message = "请选择供应商类型")
     private Integer type;
+
+    @NotNull(message = "请选择是否启用")
     private Boolean isEnabled;
-    private String baseUrlList;
+
+    @NotEmpty(message = "API 基础地址不能为空")
+    private String baseUrl;
+
+    @NotEmpty(message = "模型名称不能为空")
     private String modelName;
+
+    @NotEmpty(message = "API 密钥不能为空")
+    private String apiKey;
+
+    @NotNull(message = "请选择是否自动同步")
     private Boolean autoSync;
-    private Integer autoGroupMode;
-    private String customHeaders;
-    private String paramOverride;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.lumina.mapper.GroupMapper">
+
+    <resultMap id="modelGroupConfigResultMap" type="com.lumina.dto.ModelGroupConfig">
+        <result column="name" property="name"/>
+        <result column="balance_mode" property="balanceMode"/>
+        <collection property="items" ofType="com.lumina.dto.ModelGroupConfigItem">
+            <result column="model_name" property="modelName"/>
+            <result column="weight" property="weight"/>
+            <result column="api_key" property="apiKey"/>
+            <result column="base_url" property="baseUrl"/>
+        </collection>
+    </resultMap>
+
+    <select id="getModelGroupByName" resultMap="modelGroupConfigResultMap">
+        SELECT mg.`name`,
+               mg.balance_mode,
+               mgi.model_name,
+               mgi.weight,
+               p.base_url,
+               p.api_key
+        FROM model_groups mg
+                 JOIN model_group_items mgi ON mg.id = mgi.group_id
+                 JOIN providers p ON p.id = mgi.provider_id
+        WHERE mg.`name` = #{modelGroupName}
+        AND p.is_enabled = 1
+    </select>
+
+</mapper>

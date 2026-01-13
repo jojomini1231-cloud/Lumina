@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lumina.dto.ApiResponse;
 import com.lumina.entity.Provider;
 import com.lumina.service.ProviderService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -33,7 +34,7 @@ public class ProviderController {
     }
 
     @PostMapping
-    public ApiResponse<Provider> createProvider(@RequestBody Provider provider) {
+    public ApiResponse<Provider> createProvider(@RequestBody @Valid Provider provider) {
         provider.setCreatedAt(LocalDateTime.now());
         provider.setUpdatedAt(LocalDateTime.now());
         providerService.save(provider);
@@ -41,7 +42,7 @@ public class ProviderController {
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<Provider> updateProvider(@PathVariable Long id, @RequestBody Provider provider) {
+    public ApiResponse<Provider> updateProvider(@PathVariable Long id, @RequestBody @Valid Provider provider) {
         provider.setId(id);
         provider.setUpdatedAt(LocalDateTime.now());
         providerService.updateById(provider);
