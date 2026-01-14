@@ -2,6 +2,7 @@ package com.lumina.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -12,5 +13,5 @@ public interface RelayService {
      * @param params
      * @return
      */
-    Flux<String> relay(String type, ObjectNode params,Boolean beta);
+    Object relay(String type, ObjectNode params, Boolean beta);
 }
