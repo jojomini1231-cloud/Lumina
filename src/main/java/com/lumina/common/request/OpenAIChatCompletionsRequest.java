@@ -1,6 +1,14 @@
 package com.lumina.common.request;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.lumina.dto.ModelGroupConfigItem;
+import com.lumina.logging.LogWriter;
+import com.lumina.logging.RequestLogContext;
+import com.lumina.util.SnowflakeIdGenerator;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -11,10 +19,20 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+@Slf4j
 @Component
 public class OpenAIChatCompletionsRequest {
+
+    @Autowired
+    private SnowflakeIdGenerator snowflakeIdGenerator;
+
+    @Autowired
+    private LogWriter logWriter;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final Map<String, String> URI_MAP;
 
@@ -28,27 +46,30 @@ public class OpenAIChatCompletionsRequest {
 
     public Flux<ServerSentEvent<String>> streamChat(
             ObjectNode request,
-            String apiKey,
-            String baseUrl,
+            ModelGroupConfigItem provider,
             Boolean beta,
             String type
     ) {
-
-        System.out.println("请求体: " + request.toPrettyString());
+        RequestLogContext ctx = new RequestLogContext();
+        ctx.setProviderId(provider.getProviderId());
+        ctx.setProviderName(provider.getProviderName());
+        ctx.setId(snowflakeIdGenerator.nextId());
+        ctx.setRequestId(UUID.randomUUID().toString());
+        ctx.setStartNano(System.nanoTime());
+        ctx.setRequestTime(System.currentTimeMillis() / 1000);
+        ctx.setRequestType(type);
+        ctx.setStream(true);
+        ctx.setRequestModel(request.path("model").asText());
+        ctx.setRequestContent(request.toPrettyString());
 
         WebClient webClient = WebClient.builder()
-                .baseUrl(baseUrl)
-                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                .baseUrl(provider.getBaseUrl())
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + provider.getApiKey())
                 .build();
-
-        long startNano = System.nanoTime();
-        AtomicBoolean firstToken = new AtomicBoolean(true);
-        StringBuilder responseBuffer = new StringBuilder();
 
         return webClient.post()
                 .uri(uriBuilder -> uriBuilder
                         .path(URI_MAP.get(type))
-                        // ⚠️ 是否保留 beta 你后面可以按 provider 控制
                         .queryParam("beta", beta)
                         .build()
                 )
@@ -56,60 +77,70 @@ public class OpenAIChatCompletionsRequest {
                 .accept(MediaType.TEXT_EVENT_STREAM)
                 .bodyValue(request)
                 .retrieve()
-                // ✅ 关键修复点：明确 SSE + String
-                .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
-                })
-                // ===== 旁路观测，不破坏流 =====
+                .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
                 .doOnNext(event -> {
                     String data = event.data();
-                    if (data == null) {
-                        return;
+                    if (data == null) return;
+
+                    if (ctx.getFirstTokenArrived().compareAndSet(false, true)) {
+                        ctx.setFirstTokenMs((int)((System.nanoTime() - ctx.getStartNano()) / 1_000_000));
                     }
 
-                    // 首 token 时间
-                    if (firstToken.compareAndSet(true, false)) {
-                        long firstMs = (System.nanoTime() - startNano) / 1_000_000;
-                        System.out.println("首 token 时间(ms): " + firstMs);
-                    }
+                    if ("[DONE]".equals(data)) return;
 
-                    // DONE 是协议控制符，不是 JSON
-                    if ("[DONE]".equals(data)) {
-                        System.out.println("收到 DONE 信号");
-                        return;
-                    }
+                    ctx.getResponseBuffer().append(data);
 
-                    // 普通 chunk
-                    responseBuffer.append(data);
-                    System.out.println("收到数据 chunk: " + data);
+                    try {
+                        JsonNode chunk = objectMapper.readTree(data);
+                        if (chunk.has("usage")) {
+                            JsonNode usage = chunk.get("usage");
+                            if (usage.has("prompt_tokens")) ctx.setInputTokens(usage.get("prompt_tokens").asInt());
+                            if (usage.has("completion_tokens")) ctx.setOutputTokens(usage.get("completion_tokens").asInt());
+                        }
+                    } catch (Exception e) {
+                        log.debug("解析token失败: {}", e.getMessage());
+                    }
                 })
                 .doOnError(err -> {
-                    System.err.println("请求出错: " + err.getMessage());
+                    ctx.setStatus("FAIL");
+                    ctx.setErrorStage("HTTP");
+                    ctx.setErrorMessage(err.getMessage());
+                    ctx.setTotalTimeMs((int)((System.nanoTime() - ctx.getStartNano()) / 1_000_000));
+                    logWriter.submit(ctx);
                 })
                 .doOnComplete(() -> {
-                    long totalMs = (System.nanoTime() - startNano) / 1_000_000;
-                    System.out.println("流式响应结束，总耗时(ms): " + totalMs);
-                    System.out.println("完整响应内容: " + responseBuffer);
-                    // 👉 这里可以异步写 request_logs
+                    ctx.setTotalTimeMs((int)((System.nanoTime() - ctx.getStartNano()) / 1_000_000));
+                    ctx.setResponseContent(ctx.getResponseBuffer().toString());
+                    logWriter.submit(ctx);
                 });
     }
 
     public Mono<ObjectNode> normalChat(
             ObjectNode request,
-            String apiKey,
-            String baseUrl,
+            ModelGroupConfigItem provider,
             Boolean beta,
             String type
     ) {
+        RequestLogContext ctx = new RequestLogContext();
+        ctx.setId(snowflakeIdGenerator.nextId());
+        ctx.setProviderId(provider.getProviderId());
+        ctx.setProviderName(provider.getProviderName());
+        ctx.setRequestId(UUID.randomUUID().toString());
+        ctx.setStartNano(System.nanoTime());
+        ctx.setRequestTime(System.currentTimeMillis() / 1000);
+        ctx.setRequestType(type);
+        ctx.setStream(false);
+        ctx.setRequestModel(request.path("model").asText());
+        ctx.setRequestContent(request.toPrettyString());
 
         WebClient webClient = WebClient.builder()
-                .baseUrl(baseUrl)
-                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                .baseUrl(provider.getBaseUrl())
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + provider.getApiKey())
                 .build();
 
         return webClient.post()
                 .uri(uriBuilder -> uriBuilder
                         .path(URI_MAP.get(type))
-                        // ⚠️ 是否保留 beta 你后面可以按 provider 控制
                         .queryParam("beta", beta)
                         .build()
                 )
@@ -119,7 +150,23 @@ public class OpenAIChatCompletionsRequest {
                 .retrieve()
                 .bodyToMono(ObjectNode.class)
                 .doOnNext(resp -> {
-                    System.out.println("非流式完整响应: " + resp);
+                    ctx.setTotalTimeMs((int)((System.nanoTime() - ctx.getStartNano()) / 1_000_000));
+                    ctx.setResponseContent(resp.toString());
+
+                    if (resp.has("usage")) {
+                        JsonNode usage = resp.get("usage");
+                        if (usage.has("prompt_tokens")) ctx.setInputTokens(usage.get("prompt_tokens").asInt());
+                        if (usage.has("completion_tokens")) ctx.setOutputTokens(usage.get("completion_tokens").asInt());
+                    }
+
+                    logWriter.submit(ctx);
+                })
+                .doOnError(err -> {
+                    ctx.setStatus("FAIL");
+                    ctx.setErrorStage("HTTP");
+                    ctx.setErrorMessage(err.getMessage());
+                    ctx.setTotalTimeMs((int)((System.nanoTime() - ctx.getStartNano()) / 1_000_000));
+                    logWriter.submit(ctx);
                 });
     }
 }

@@ -28,6 +28,10 @@ public class Provider {
     @NotEmpty(message = "模型名称不能为空")
     private String modelName;
 
+    private String actualModel;
+
+    private Boolean beta;
+
     @NotEmpty(message = "API 密钥不能为空")
     private String apiKey;
 

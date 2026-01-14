@@ -52,8 +52,7 @@ public class RelayServiceImpl implements RelayService {
                                 requestParams.put("model", provider.getModelName());
                                 return openAIChatCompletionsRequest.streamChat(
                                         requestParams,
-                                        provider.getApiKey(),
-                                        provider.getBaseUrl(),
+                                        provider,
                                         beta,
                                         type);
                             },
@@ -71,8 +70,7 @@ public class RelayServiceImpl implements RelayService {
                                 requestParams.put("model", provider.getModelName());
                                 return openAIChatCompletionsRequest.normalChat(
                                         requestParams,
-                                        provider.getApiKey(),
-                                        provider.getBaseUrl(),
+                                        provider,
                                         beta,
                                         type);
                             },

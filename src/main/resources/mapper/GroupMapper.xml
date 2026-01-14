@@ -6,6 +6,8 @@
         <result column="name" property="name"/>
         <result column="balance_mode" property="balanceMode"/>
         <collection property="items" ofType="com.lumina.dto.ModelGroupConfigItem">
+            <result column="provider_id" property="providerId"/>
+            <result column="provider_name" property="providerName"/>
             <result column="model_name" property="modelName"/>
             <result column="weight" property="weight"/>
             <result column="api_key" property="apiKey"/>
@@ -33,13 +35,15 @@
                mgi.model_name,
                mgi.weight,
                p.base_url,
-               p.api_key
+               p.api_key,
+               p.id AS provider_id,
+               p.`name` AS provider_name
         FROM model_groups mg
                  JOIN model_group_items mgi ON mg.id = mgi.group_id
                  JOIN providers p ON p.id = mgi.provider_id
         WHERE mg.`name` = #{modelGroupName}
         AND p.is_enabled = 1
-    </select>
+        </select>
 
     <select id="getGroupsByPage" resultMap="groupResultMap">
         SELECT *
