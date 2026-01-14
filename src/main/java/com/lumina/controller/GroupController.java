@@ -25,7 +25,7 @@ public class GroupController {
 
     @GetMapping("/{id}")
     public ApiResponse<Group> getGroupById(@PathVariable Long id) {
-        Group group = groupService.getById(id);
+        Group group = groupService.getGroupById(id);
         if (group == null) {
             throw new IllegalArgumentException("Group not found with id: " + id);
         }
@@ -34,32 +34,19 @@ public class GroupController {
 
     @PostMapping
     public ApiResponse<Group> createGroup(@RequestBody Group group) {
-        group.setCreatedAt(LocalDateTime.now());
-        group.setUpdatedAt(LocalDateTime.now());
-        boolean success = groupService.save(group);
-        if (!success) {
-            throw new IllegalArgumentException("Failed to create group");
-        }
+        groupService.createGroup(group);
         return ApiResponse.success(group);
     }
 
     @PutMapping("/{id}")
     public ApiResponse<Group> updateGroup(@PathVariable Long id, @RequestBody Group group) {
-        group.setId(id);
-        group.setUpdatedAt(LocalDateTime.now());
-        boolean success = groupService.updateById(group);
-        if (!success) {
-            throw new IllegalArgumentException("Group not found with id: " + id);
-        }
+        groupService.updateGroup(id,group);
         return ApiResponse.success(group);
     }
 
     @DeleteMapping("/{id}")
     public ApiResponse<Void> deleteGroup(@PathVariable Long id) {
-        boolean success = groupService.removeById(id);
-        if (!success) {
-            throw new IllegalArgumentException("Group not found with id: " + id);
-        }
+        groupService.deleteGroup(id);
         return ApiResponse.success(null);
     }
 
@@ -67,7 +54,7 @@ public class GroupController {
     public ApiResponse<Page<Group>> getGroupsByPage(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size) {
-        Page<Group> page = groupService.page(new Page<>(current, size));
+        Page<Group> page = groupService.getGroupsByPage(new Page<>(current, size));
         return ApiResponse.success(page);
     }
 }

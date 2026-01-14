@@ -2,6 +2,7 @@ package com.lumina.mapper;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lumina.dto.ModelGroupConfig;
 import com.lumina.entity.Group;
 import org.apache.ibatis.annotations.Mapper;
@@ -14,4 +15,11 @@ public interface GroupMapper extends BaseMapper<Group> {
      * @return
      */
     ModelGroupConfig getModelGroupByName(String modelGroupName);
+
+    /**
+     * 获取模型分组列表
+     * @param page
+     * @return
+     */
+    Page<Group> getGroupsByPage(Page<Object> page);
 }

@@ -11,6 +11,8 @@ public class GroupItem {
     private Long id;
     private Long groupId;
     private Long providerId;
+    @TableField(exist = false)
+    private String providerName;
     private String modelName;
     private Integer priority;
     private Integer weight;

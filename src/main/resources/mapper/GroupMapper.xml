@@ -13,6 +13,20 @@
         </collection>
     </resultMap>
 
+    <resultMap id="groupResultMap" type="com.lumina.entity.Group">
+        <result column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="balance_mode" property="balanceMode"/>
+        <result column="match_regex" property="matchRegex"/>
+        <result column="first_token_timeout" property="firstTokenTimeout"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <collection property="groupItems"
+                    ofType="com.lumina.entity.GroupItem"
+                    select="selectGroupItemsByGroupId"
+                    column="{id=id}"/>
+    </resultMap>
+
     <select id="getModelGroupByName" resultMap="modelGroupConfigResultMap">
         SELECT mg.`name`,
                mg.balance_mode,
@@ -25,6 +39,19 @@
                  JOIN providers p ON p.id = mgi.provider_id
         WHERE mg.`name` = #{modelGroupName}
         AND p.is_enabled = 1
+    </select>
+
+    <select id="getGroupsByPage" resultMap="groupResultMap">
+        SELECT *
+        FROM model_groups
+    </select>
+
+    <select id="selectGroupItemsByGroupId" resultType="com.lumina.entity.GroupItem">
+        SELECT g.*,
+               p.name AS providerName
+        FROM model_group_items g
+                 JOIN providers p ON p.id = g.provider_id
+        WHERE g.group_id = #{id}
     </select>
 
 </mapper>

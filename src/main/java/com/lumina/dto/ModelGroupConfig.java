@@ -7,6 +7,8 @@ import java.util.List;
 @Data
 public class ModelGroupConfig {
 
+    private String id;
+
     private String name;
 
     private Integer balanceMode;

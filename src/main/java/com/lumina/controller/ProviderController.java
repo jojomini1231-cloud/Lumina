@@ -75,4 +75,10 @@ public class ProviderController {
         wrapper.eq("type", type);
         return ApiResponse.success(providerService.list(wrapper));
     }
+
+
+    @PostMapping("/models")
+    public ApiResponse<List<String>> getModels(@RequestBody Provider provider) {
+        return ApiResponse.success(providerService.getModels(provider));
+    }
 }
