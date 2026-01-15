@@ -17,6 +17,7 @@ import reactor.core.publisher.Mono;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Slf4j
 @Service
@@ -26,76 +27,107 @@ public class FailoverService {
     private final ProviderStateRegistry providerStateRegistry;
     private final ProviderScoreCalculator scoreCalculator;
     private final CircuitBreaker circuitBreaker;
+    private static final int TOP_K = 3;
+    private static final double SOFTMAX_T = 10.0;
 
-    public ModelGroupConfigItem selectAvailableProvider(ModelGroupConfig modelGroupConfig) {
-        return selectAvailableProvider(modelGroupConfig, java.util.Collections.emptySet());
-    }
-
-    public ModelGroupConfigItem selectAvailableProvider(ModelGroupConfig modelGroupConfig, Set<String> excludeIds) {
-        List<ModelGroupConfigItem> candidates = modelGroupConfig.getItems()
-                .stream()
-                .filter(item -> {
-                    String id = generateProviderId(item);
-                    if (excludeIds.contains(id)) {
-                        return false;
-                    }
-                    ProviderRuntimeState stats = providerStateRegistry.get(id);
-                    if (stats.getProviderName() == null) {
-                        stats.setProviderName(item.getProviderName());
-                    }
-                    return circuitBreaker.allowRequest(stats);
-                })
-                .toList();
-
-        if (candidates.isEmpty()) {
-            throw new RuntimeException("所有Provider已熔断、不可用或已尝试过");
+        public ModelGroupConfigItem selectAvailableProvider(ModelGroupConfig modelGroupConfig) {
+            return selectAvailableProvider(modelGroupConfig, java.util.Collections.emptySet());
         }
-
-        // 权重随机策略：评分越高被随机到的概率越大
-        double totalScore = candidates.stream()
-                .mapToDouble(item -> Math.max(providerStateRegistry.get(generateProviderId(item)).getScore(), 0.0))
-                .sum();
-
-        if (totalScore <= 0) {
-            // 如果所有评分都为 0，退化为等概率随机
-            return candidates.get(java.util.concurrent.ThreadLocalRandom.current().nextInt(candidates.size()));
-        }
-
-        double randomValue = java.util.concurrent.ThreadLocalRandom.current().nextDouble() * totalScore;
-        double cumulativeScore = 0;
-        for (ModelGroupConfigItem item : candidates) {
-            cumulativeScore += Math.max(providerStateRegistry.get(generateProviderId(item)).getScore(), 0.0);
-            if (randomValue <= cumulativeScore) {
-                return item;
+    
+        public ModelGroupConfigItem selectAvailableProvider(ModelGroupConfig modelGroupConfig, Set<String> excludeIds) {
+    
+            // 1. 过滤可用 Provider (同时排除已尝试过的)
+            List<ModelGroupConfigItem> available = modelGroupConfig.getItems()
+                    .stream()
+                    .filter(item -> {
+                        String id = generateProviderId(item);
+                        if (excludeIds.contains(id)) {
+                            return false;
+                        }
+                        ProviderRuntimeState stats =
+                                providerStateRegistry.get(id);
+                        if (stats.getProviderName() == null) {
+                            stats.setProviderName(item.getProviderName());
+                        }
+                        return circuitBreaker.allowRequest(stats);
+                    })
+                    .toList();
+    
+            if (available.isEmpty()) {
+                throw new RuntimeException("所有 Provider 已熔断、不可用或已尝试过");
             }
+    
+            // 2. 按 score 降序排序
+            List<ModelGroupConfigItem> sorted = available.stream()
+                    .sorted((a, b) -> {
+                        double sa = providerStateRegistry
+                                .get(generateProviderId(a))
+                                .getScore();
+                        double sb = providerStateRegistry
+                                .get(generateProviderId(b))
+                                .getScore();
+                        return Double.compare(sb, sa);
+                    })
+                    .toList();
+    
+            // 3. 取 Top-K
+            List<ModelGroupConfigItem> topK = sorted.subList(
+                    0,
+                    Math.min(TOP_K, sorted.size())
+            );
+    
+            // 4. 计算 Softmax 权重
+            double[] weights = new double[topK.size()];
+            double sum = 0.0;
+    
+            for (int i = 0; i < topK.size(); i++) {
+                double score = providerStateRegistry
+                        .get(generateProviderId(topK.get(i)))
+                        .getScore();
+    
+                // Softmax：exp(score / T)
+                double w = Math.exp(score / SOFTMAX_T);
+                weights[i] = w;
+                sum += w;
+            }
+    
+            // 5. 按权重随机选择
+            double r = ThreadLocalRandom.current().nextDouble() * sum;
+            double acc = 0.0;
+    
+            for (int i = 0; i < topK.size(); i++) {
+                acc += weights[i];
+                if (r <= acc) {
+                    return topK.get(i);
+                }
+            }
+    
+            // 理论上不会走到这里，兜底返回第一名
+            return topK.get(0);
         }
-
-        return candidates.get(candidates.size() - 1);
-    }
-
-    public Mono<ObjectNode> executeWithFailoverMono(
-            java.util.function.Function<ModelGroupConfigItem, Mono<ObjectNode>> callFunction,
-            ModelGroupConfig group
-    ) {
-        return executeWithFailoverMono(callFunction, group, new HashSet<>());
-    }
-
-    private Mono<ObjectNode> executeWithFailoverMono(
-            java.util.function.Function<ModelGroupConfigItem, Mono<ObjectNode>> callFunction,
-            ModelGroupConfig group,
-            Set<String> tried
-    ) {
-        ModelGroupConfigItem item;
-        try {
-            item = selectAvailableProvider(group, tried);
-        } catch (Exception e) {
-            return Mono.error(e);
+    
+        public Mono<ObjectNode> executeWithFailoverMono(
+                java.util.function.Function<ModelGroupConfigItem, Mono<ObjectNode>> callFunction,
+                ModelGroupConfig group
+        ) {
+            return executeWithFailoverMono(callFunction, group, new HashSet<>());
         }
-        
-        String providerId = generateProviderId(item);
-        tried.add(providerId);
-
-        ProviderRuntimeState state = providerStateRegistry.get(providerId);
+    
+        private Mono<ObjectNode> executeWithFailoverMono(
+                java.util.function.Function<ModelGroupConfigItem, Mono<ObjectNode>> callFunction,
+                ModelGroupConfig group,
+                Set<String> tried
+        ) {
+            ModelGroupConfigItem item;
+            try {
+                item = selectAvailableProvider(group, tried);
+            } catch (Exception e) {
+                return Mono.error(e);
+            }
+    
+            String providerId = generateProviderId(item);
+            tried.add(providerId);
+            ProviderRuntimeState state = providerStateRegistry.get(providerId);
 
         log.debug("尝试使用Provider: {}, 当前评分: {}", providerId, state.getScore());
 
