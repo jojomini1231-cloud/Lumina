@@ -63,6 +63,11 @@ public class GeminiModelsExecutor extends AbstractRequestExecutor {
                         ctx.setFirstTokenMs((int) ((System.nanoTime() - ctx.getStartNano()) / 1_000_000));
                     }
                     ctx.getResponseBuffer().append(data);
+
+                    try {
+                        handleUsage(ctx, objectMapper.readTree(data));
+                    } catch (Exception ignored) {
+                    }
                 })
                 .doOnError(err -> recordError(ctx, err))
                 .doOnComplete(() -> recordSuccess(ctx, ctx.getResponseBuffer().toString()));

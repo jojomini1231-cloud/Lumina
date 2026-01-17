@@ -1,11 +1,14 @@
 package com.lumina.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.lumina.dto.ModelGroupConfigItem;
+import com.lumina.entity.LlmModel;
 import com.lumina.logging.LogWriter;
 import com.lumina.logging.RequestLogContext;
+import com.lumina.service.LlmModelService;
 import com.lumina.service.LlmRequestExecutor;
 import com.lumina.util.SnowflakeIdGenerator;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +17,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.UUID;
 
 @Slf4j
@@ -24,6 +29,9 @@ public abstract class AbstractRequestExecutor implements LlmRequestExecutor {
 
     @Autowired
     protected LogWriter logWriter;
+
+    @Autowired
+    protected LlmModelService llmModelService;
 
     protected final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -43,19 +51,99 @@ public abstract class AbstractRequestExecutor implements LlmRequestExecutor {
     }
 
     protected void handleUsage(RequestLogContext ctx, JsonNode node) {
-        if (node != null && node.has("usage")) {
-            JsonNode usage = node.get("usage");
-            // 兼容旧版 OpenAI 字段
-            if (usage.has("prompt_tokens")) ctx.setInputTokens(usage.get("prompt_tokens").asInt());
-            if (usage.has("completion_tokens")) ctx.setOutputTokens(usage.get("completion_tokens").asInt());
-            
-            // 兼容新版 /responses 接口字段
-            if (usage.has("input_tokens") && ctx.getInputTokens() == null) {
-                ctx.setInputTokens(usage.get("input_tokens").asInt());
+        if (node == null) return;
+
+        // 提取 model 字段作为 actualModel
+        if (node.has("model")) {
+            ctx.setActualModel(node.get("model").asText());
+        } else if (node.has("modelVersion")) {
+            ctx.setActualModel(node.get("modelVersion").asText());
+        } else if (node.has("message") && node.get("message").has("model")) {
+            ctx.setActualModel(node.get("message").get("model").asText());
+        }
+
+        // 1. 处理标准的 "usage" 字段 (OpenAI, Anthropic message_delta, Anthropic normal)
+        if (node.has("usage")) {
+            parseUsageNode(ctx, node.get("usage"));
+        }
+
+        // 2. 处理 Anthropic message_start 中的 nested usage
+        if (node.has("message") && node.get("message").has("usage")) {
+            parseUsageNode(ctx, node.get("message").get("usage"));
+        }
+
+        // 3. 处理 Gemini 的 "usageMetadata" 字段
+        if (node.has("usageMetadata")) {
+            JsonNode usage = node.get("usageMetadata");
+            if (usage.has("promptTokenCount") && ctx.getInputTokens() == null) {
+                ctx.setInputTokens(usage.get("promptTokenCount").asInt());
             }
-            if (usage.has("output_tokens") && ctx.getOutputTokens() == null) {
-                ctx.setOutputTokens(usage.get("output_tokens").asInt());
+            if (usage.has("candidatesTokenCount") && ctx.getOutputTokens() == null) {
+                ctx.setOutputTokens(usage.get("candidatesTokenCount").asInt());
             }
+        }
+
+        // 4. 处理 OpenAI /v1/responses 中的 nested usage
+        if (node.has("response") && node.get("response").has("usage")) {
+            parseUsageNode(ctx, node.get("response").get("usage"));
+        }
+    }
+
+    private void parseUsageNode(RequestLogContext ctx, JsonNode usage) {
+        // 兼容旧版 OpenAI 字段
+        if (usage.has("prompt_tokens") && ctx.getInputTokens() == null) {
+            ctx.setInputTokens(usage.get("prompt_tokens").asInt());
+        }
+        if (usage.has("completion_tokens") && ctx.getOutputTokens() == null) {
+            ctx.setOutputTokens(usage.get("completion_tokens").asInt());
+        }
+
+        // 兼容新版 /responses 接口字段 或 Anthropic 字段
+        if (usage.has("input_tokens") && ctx.getInputTokens() == null) {
+            ctx.setInputTokens(usage.get("input_tokens").asInt());
+        }
+        if (usage.has("output_tokens") && ctx.getOutputTokens() == null) {
+            ctx.setOutputTokens(usage.get("output_tokens").asInt());
+        }
+    }
+
+    protected void calculateCost(RequestLogContext ctx) {
+        if (ctx.getRequestModel() == null) {
+            return;
+        }
+
+        try {
+            LlmModel model = llmModelService.getOne(new LambdaQueryWrapper<LlmModel>()
+                    .eq(LlmModel::getModelName, ctx.getRequestModel())
+                    .orderByDesc(LlmModel::getInputPrice)
+                    .last("limit 1"));
+            if (model == null) {
+                log.warn("未找到模型价格信息: {}", ctx.getActualModel());
+                return;
+            }
+
+            BigDecimal inputCost = BigDecimal.ZERO;
+            BigDecimal outputCost = BigDecimal.ZERO;
+
+            // 计算输入费用（价格单位为每百万Token）
+            if (ctx.getInputTokens() != null && ctx.getInputTokens() > 0) {
+                inputCost = model.getInputPrice()
+                        .multiply(BigDecimal.valueOf(ctx.getInputTokens()))
+                        .divide(BigDecimal.valueOf(1_000_000), 6, RoundingMode.HALF_UP);
+            }
+
+            // 计算输出费用（价格单位为每百万Token）
+            if (ctx.getOutputTokens() != null && ctx.getOutputTokens() > 0) {
+                outputCost = model.getOutputPrice()
+                        .multiply(BigDecimal.valueOf(ctx.getOutputTokens()))
+                        .divide(BigDecimal.valueOf(1_000_000), 6, RoundingMode.HALF_UP);
+            }
+
+            // 总费用保留4位小数
+            BigDecimal totalCost = inputCost.add(outputCost).setScale(4, RoundingMode.HALF_UP);
+            ctx.setCost(totalCost);
+        } catch (Exception e) {
+            log.error("计算费用失败: model={}, error={}", ctx.getActualModel(), e.getMessage());
         }
     }
 
@@ -70,6 +158,7 @@ public abstract class AbstractRequestExecutor implements LlmRequestExecutor {
     protected void recordSuccess(RequestLogContext ctx, String content) {
         ctx.setTotalTimeMs((int) ((System.nanoTime() - ctx.getStartNano()) / 1_000_000));
         ctx.setResponseContent(content);
+        calculateCost(ctx);
         logWriter.submit(ctx);
     }
 

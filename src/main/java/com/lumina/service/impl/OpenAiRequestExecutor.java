@@ -73,13 +73,7 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
                     if (!"[DONE]".equals(data)) {
                         ctx.getResponseBuffer().append(data);
                         try {
-                            JsonNode chunk = objectMapper.readTree(data);
-                            // 尝试解析根路径的 usage (Chat Completions)
-                            handleUsage(ctx, chunk);
-                            // 尝试解析嵌套在 response 里的 usage (/v1/responses)
-                            if (chunk.has("response")) {
-                                handleUsage(ctx, chunk.get("response"));
-                            }
+                            handleUsage(ctx, objectMapper.readTree(data));
                         } catch (Exception ignored) {
                         }
                     }

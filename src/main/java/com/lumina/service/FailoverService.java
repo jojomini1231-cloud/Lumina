@@ -129,7 +129,7 @@ public class FailoverService {
             tried.add(providerId);
             ProviderRuntimeState state = providerStateRegistry.get(providerId);
 
-        log.debug("尝试使用Provider: {}, 当前评分: {}", providerId, state.getScore());
+        log.debug("尝试使用Provider(非流式): {}, 当前评分: {}", providerId, state.getScore());
 
         long startTime = System.currentTimeMillis();
 
