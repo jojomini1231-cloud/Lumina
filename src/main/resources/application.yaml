@@ -33,6 +33,11 @@ spring:
       fail-on-unknown-properties: false
     default-property-inclusion: NON_NULL
 
+  # HTTP Codec 配置
+  http:
+    codecs:
+      max-in-memory-size: 100MB
+
   # MVC 配置
   mvc:
     async:
