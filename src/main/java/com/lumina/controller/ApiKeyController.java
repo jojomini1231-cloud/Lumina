@@ -33,6 +33,15 @@ public class ApiKeyController {
         return ApiResponse.success(apiKey);
     }
 
+    @PostMapping("/generate")
+    public ApiResponse<ApiKey> generateApiKey(@RequestBody ApiKey apiKeyRequest) {
+        if (apiKeyRequest.getName() == null || apiKeyRequest.getName().trim().isEmpty()) {
+            throw new IllegalArgumentException("Name is required");
+        }
+        ApiKey apiKey = apiKeyService.generateApiKey(apiKeyRequest.getName());
+        return ApiResponse.success(apiKey);
+    }
+
     @PostMapping
     public ApiResponse<ApiKey> createApiKey(@RequestBody ApiKey apiKey) {
         apiKey.setCreatedAt(LocalDateTime.now());
