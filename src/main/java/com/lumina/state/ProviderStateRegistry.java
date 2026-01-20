@@ -57,4 +57,20 @@ public class ProviderStateRegistry {
     public void clear() {
         stateMap.clear();
     }
+
+    /**
+     * 从注册表中移除指定的 Provider
+     * @param providerId Provider ID
+     */
+    public void remove(String providerId) {
+        stateMap.remove(providerId);
+    }
+
+    /**
+     * 批量移除指定的 Providers
+     * @param providerIds Provider IDs
+     */
+    public void removeAll(Collection<String> providerIds) {
+        providerIds.forEach(stateMap::remove);
+    }
 }

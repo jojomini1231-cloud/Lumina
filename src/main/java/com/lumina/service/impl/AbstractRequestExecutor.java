@@ -54,12 +54,10 @@ public abstract class AbstractRequestExecutor implements LlmRequestExecutor {
         if (node == null) return;
 
         // 提取 model 字段作为 actualModel
-        if (node.has("model")) {
-            ctx.setActualModel(node.get("model").asText());
-        } else if (node.has("modelVersion")) {
-            ctx.setActualModel(node.get("modelVersion").asText());
-        } else if (node.has("message") && node.get("message").has("model")) {
-            ctx.setActualModel(node.get("message").get("model").asText());
+        if (!node.findValuesAsText("model").isEmpty()) {
+            ctx.setActualModel(node.findValuesAsText("model").get(0));
+        } else if (!node.findValuesAsText("modelVersion").isEmpty()) {
+            ctx.setActualModel(node.findValuesAsText("modelVersion").get(0));
         }
 
         // 1. 处理标准的 "usage" 字段 (OpenAI, Anthropic message_delta, Anthropic normal)
