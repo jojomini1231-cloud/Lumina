@@ -11,7 +11,7 @@
  Target Server Version : 80044 (8.0.44-0ubuntu0.24.04.2)
  File Encoding         : 65001
 
- Date: 15/01/2026 17:06:03
+ Date: 20/01/2026 17:09:49
 */
 
 SET NAMES utf8mb4;
@@ -34,7 +34,7 @@ CREATE TABLE `api_keys` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_api_key` (`api_key`),
   KEY `idx_enabled` (`is_enabled`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='API密钥表';
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='API密钥表';
 
 -- ----------------------------
 -- Table structure for llm_models
@@ -42,13 +42,19 @@ CREATE TABLE `api_keys` (
 DROP TABLE IF EXISTS `llm_models`;
 CREATE TABLE `llm_models` (
   `model_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '模型名称',
-  `input_price` decimal(10,6) NOT NULL DEFAULT '0.000000' COMMENT '输入价格（每百万Token）',
-  `output_price` decimal(10,6) NOT NULL DEFAULT '0.000000' COMMENT '输出价格（每百万Token）',
-  `cache_read_price` decimal(10,6) NOT NULL DEFAULT '0.000000' COMMENT '缓存读取价格（每百万Token）',
-  `cache_write_price` decimal(10,6) NOT NULL DEFAULT '0.000000' COMMENT '缓存写入价格（每百万Token）',
+  `provider` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '家族',
+  `input_price` decimal(10,2) DEFAULT '0.00' COMMENT '输入价格（每百万Token）',
+  `output_price` decimal(10,2) DEFAULT '0.00' COMMENT '输出价格（每百万Token）',
+  `context_limit` int DEFAULT '0' COMMENT '上下文限制',
+  `output_limit` int DEFAULT '0' COMMENT '输出限制',
+  `cache_read_price` decimal(10,2) DEFAULT NULL COMMENT '缓存读取价格',
+  `cache_write_price` decimal(10,2) DEFAULT NULL COMMENT '缓存写入价格',
+  `is_reasoning` tinyint DEFAULT NULL COMMENT '推理',
+  `is_tool_call` tinyint DEFAULT NULL COMMENT '工具调用',
+  `input_type` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '输入类型支持',
+  `last_updated_at` varchar(25) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '模型最后更新时间',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`model_name`)
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LLM模型信息表';
 
 -- ----------------------------
@@ -81,7 +87,7 @@ CREATE TABLE `model_group_items` (
   KEY `idx_provider_id` (`provider_id`),
   CONSTRAINT `fk_group_items_group` FOREIGN KEY (`group_id`) REFERENCES `model_groups` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_group_items_provider` FOREIGN KEY (`provider_id`) REFERENCES `providers` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=122 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分组项目表';
+) ENGINE=InnoDB AUTO_INCREMENT=160 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分组项目表';
 
 -- ----------------------------
 -- Table structure for model_groups
@@ -92,12 +98,12 @@ CREATE TABLE `model_groups` (
   `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '分组名称（对外暴露的模型名）',
   `balance_mode` tinyint NOT NULL COMMENT '负载均衡模式：1-轮询，2-随机，3-故障转移，4-加权',
   `match_regex` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '匹配正则表达式',
-  `first_token_timeout` int DEFAULT NULL COMMENT '首个Token超时时间（秒）',
+  `first_token_timeout` int DEFAULT '45000' COMMENT '首个Token超时时间（秒）',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_name` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分组表';
+  UNIQUE KEY `idx_name` (`name`)
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分组表';
 
 -- ----------------------------
 -- Table structure for provider_runtime_stats
@@ -127,8 +133,8 @@ DROP TABLE IF EXISTS `providers`;
 CREATE TABLE `providers` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '供应商ID',
   `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '供应商名称',
-  `type` tinyint NOT NULL DEFAULT '0' COMMENT '供应商类型：0-OpenAI Chat, 1-OpenAI Response, 2-Anthropic, 3-Gemini, 4-Volcengine',
-  `base_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Base URL，如：https://api.openai.com/v1',
+  `type` tinyint NOT NULL DEFAULT '0' COMMENT '供应商类型：0-OpenAI Chat, 1-OpenAI Response, 2-Anthropic, 3-Gemini, 4-new api',
+  `base_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Base URL，如：https://api.openai.com',
   `api_key` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT 'api请求密钥',
   `model_name` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '模型名称',
   `actual_model` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '实际模型名',
@@ -141,14 +147,14 @@ CREATE TABLE `providers` (
   UNIQUE KEY `uk_name` (`name`),
   KEY `idx_type` (`type`),
   KEY `idx_enabled` (`is_enabled`)
-) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='供应商表';
+) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='供应商表';
 
 -- ----------------------------
 -- Table structure for request_logs
 -- ----------------------------
 DROP TABLE IF EXISTS `request_logs`;
 CREATE TABLE `request_logs` (
-  `id` bigint unsigned NOT NULL COMMENT '日志ID（Snowflake ID）',
+  `id` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '日志ID（Snowflake ID）',
   `request_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '请求唯一ID',
   `request_time` bigint DEFAULT NULL COMMENT '请求时间戳（秒）',
   `request_type` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'chat_completions' COMMENT 'chat_completions / responses / messages',
@@ -165,8 +171,8 @@ CREATE TABLE `request_logs` (
   `total_time_ms` int DEFAULT '0' COMMENT '总耗时(毫秒)',
   `cost` decimal(10,4) DEFAULT '0.0000' COMMENT '消耗费用',
   `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'SUCCESS' COMMENT 'SUCCESS / FAIL',
-  `request_content` mediumtext COLLATE utf8mb4_unicode_ci COMMENT '请求内容（JSON）',
-  `response_content` mediumtext COLLATE utf8mb4_unicode_ci COMMENT '响应内容（JSON）',
+  `request_content` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT '请求内容（JSON）',
+  `response_content` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT '响应内容（JSON）',
   `error_message` text COLLATE utf8mb4_unicode_ci COMMENT '错误信息',
   `error_stage` varchar(32) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'CONNECT / HTTP / DECODE / TIMEOUT',
   `retry_count` int DEFAULT '0' COMMENT '故障转移次数',
@@ -204,6 +210,6 @@ CREATE TABLE `users` (
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
 SET FOREIGN_KEY_CHECKS = 1;
