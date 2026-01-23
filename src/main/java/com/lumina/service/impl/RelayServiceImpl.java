@@ -1,8 +1,12 @@
 package com.lumina.service.impl;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.lumina.dto.ModelGroupConfig;
 import com.lumina.dto.ModelGroupConfigItem;
+import com.lumina.entity.Group;
 import com.lumina.service.FailoverService;
 import com.lumina.service.GroupService;
 import com.lumina.service.LlmRequestExecutor;
@@ -13,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +32,9 @@ public class RelayServiceImpl implements RelayService {
 
     @Autowired
     private List<LlmRequestExecutor> executors;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     private LlmRequestExecutor getExecutor(String type) {
         return executors.stream()
@@ -150,5 +158,28 @@ public class RelayServiceImpl implements RelayService {
                     timeoutMs
             ).map(ResponseEntity::ok);
         }
+    }
+
+    @Override
+    public Mono<ResponseEntity<?>> models() {
+        List<Group> groups = groupService.list();
+
+        ArrayNode dataArray = objectMapper.createArrayNode();
+        long createdTimestamp = Instant.now().getEpochSecond();
+
+        for (Group group : groups) {
+            ObjectNode model = objectMapper.createObjectNode();
+            model.put("id", group.getName());
+            model.put("object", "model");
+            model.put("created", createdTimestamp);
+            model.put("owned_by", "OpenAI");
+            dataArray.add(model);
+        }
+
+        ObjectNode response = objectMapper.createObjectNode();
+        response.put("object", "list");
+        response.set("data", dataArray);
+
+        return Mono.just(ResponseEntity.ok(response));
     }
 }

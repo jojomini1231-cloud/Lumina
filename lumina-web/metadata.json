@@ -1,0 +1,5 @@
+{
+  "name": "Lumina",
+  "description": "A simple, beautiful, and elegant LLM API aggregation and load balancing service management dashboard.",
+  "requestFramePermissions": []
+}

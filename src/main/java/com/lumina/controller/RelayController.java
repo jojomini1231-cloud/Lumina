@@ -17,6 +17,11 @@ public class RelayController {
     @Autowired
     private RelayService relayService;
 
+    @GetMapping("/v1/models")
+    public Mono<ResponseEntity<?>> models() {
+        return relayService.models();
+    }
+
     @PostMapping("/v1/messages")
     public Mono<ResponseEntity<?>> createMessage(
             @RequestBody ObjectNode params,

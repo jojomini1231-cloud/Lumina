@@ -54,6 +54,7 @@ public class SecurityConfig {
                         .pathMatchers("/v1/**").permitAll()
                         .pathMatchers("/v1beta/**").permitAll()
                         .pathMatchers("/actuator/**").permitAll()
+                        .pathMatchers("/", "/index.html", "/assets/**", "/*.js", "/*.css", "/*.ico", "/*.png", "/*.svg").permitAll()
                         .anyExchange().authenticated()
                 )
                 .addFilterAt(jwtAuthenticationFilter, SecurityWebFiltersOrder.AUTHENTICATION)

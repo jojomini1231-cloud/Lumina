@@ -10,4 +10,7 @@ public interface RelayService {
 
 
     Mono<ResponseEntity<?>> relay(String type,String modelAction, ObjectNode params, Map<String, String> queryParams);
+
+
+    Mono<ResponseEntity<?>> models();
 }
