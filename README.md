@@ -131,4 +131,4 @@ lumina/
 - [ ] 支持更多提供商 (Cohere, DeepSeek, Llama.cpp)
 
 ## 📄 许可证
-本项目采用 [MIT License](LICENSE) 开源。
+本项目采用 [AGPL-3.0 license](LICENSE) 开源。
