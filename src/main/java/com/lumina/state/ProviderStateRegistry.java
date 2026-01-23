@@ -39,7 +39,11 @@ public class ProviderStateRegistry {
             }
             log.info("从数据库加载了 {} 条 Provider 运行态数据", list.size());
         } catch (Exception e) {
-            log.error("加载 Provider 运行态数据失败", e);
+            if (isTableNotExists(e)) {
+                log.warn("provider_runtime_stats 表尚未初始化，跳过运行态加载");
+            } else {
+                log.error("加载 Provider 运行态数据失败", e);
+            }
         }
     }
 
@@ -72,5 +76,16 @@ public class ProviderStateRegistry {
      */
     public void removeAll(Collection<String> providerIds) {
         providerIds.forEach(stateMap::remove);
+    }
+
+    private boolean isTableNotExists(Throwable e) {
+        Throwable t = e;
+        while (t != null) {
+            if (t.getMessage() != null && t.getMessage().contains("no such table")) {
+                return true;
+            }
+            t = t.getCause();
+        }
+        return false;
     }
 }

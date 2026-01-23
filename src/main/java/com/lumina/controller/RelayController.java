@@ -60,4 +60,12 @@ public class RelayController {
             @RequestParam Map<String, String> allParams) {
         return relayService.relay("gemini_models", modelAction,params, allParams);
     }
+
+    @PostMapping(
+            value = "/v1/messages/count_tokens",
+            consumes = MediaType.APPLICATION_JSON_VALUE
+    )
+    public Mono<ResponseEntity<?>> countTokens(@RequestBody ObjectNode params) {
+        return Mono.just(ResponseEntity.ok(Map.of("input_tokens",0)));
+    }
 }
