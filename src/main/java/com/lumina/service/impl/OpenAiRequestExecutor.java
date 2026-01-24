@@ -32,7 +32,7 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
     @Override
     public Mono<ObjectNode> executeNormal(ObjectNode request, ModelGroupConfigItem provider, Map<String, String> queryParams, String modelAction, String type, Integer timeoutMs) {
         RequestLogContext ctx = createLogContext(request, provider, type, false);
-        return createWebClient(provider).post()
+        Mono<ObjectNode> result = createWebClient(provider).post()
                 .uri(uriBuilder -> {
                     uriBuilder.path(URI_MAP.get(type));
                     queryParams.forEach(uriBuilder::queryParam);
@@ -42,7 +42,9 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
                 .accept(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .retrieve()
-                .bodyToMono(ObjectNode.class)
+                .bodyToMono(ObjectNode.class);
+
+        return applyTimeout(result, timeoutMs)
                 .doOnNext(resp -> {
                     handleUsage(ctx, resp);
                     recordSuccess(ctx, resp.toString());
@@ -53,7 +55,7 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
     @Override
     public Flux<ServerSentEvent<String>> executeStream(ObjectNode request, ModelGroupConfigItem provider, Map<String, String> queryParams, String modelAction, String type, Integer timeoutMs) {
         RequestLogContext ctx = createLogContext(request, provider, type, true);
-        return createWebClient(provider).post()
+        Flux<ServerSentEvent<String>> result = createWebClient(provider).post()
                 .uri(uriBuilder -> {
                     uriBuilder.path(URI_MAP.get(type));
                     queryParams.forEach(uriBuilder::queryParam);
@@ -62,7 +64,9 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.TEXT_EVENT_STREAM)
                 .bodyValue(request).retrieve()
-                .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
+                .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {});
+
+        return applyTimeout(result, timeoutMs)
                 .doOnNext(event -> {
                     System.out.println("[SSE] raw event: {}"+ event);
                     String data = event.data();

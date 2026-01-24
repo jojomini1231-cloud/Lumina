@@ -13,6 +13,8 @@ COPY --from=web-build /web/dist ./src/main/resources/static
 RUN mvn clean package -DskipTests
 
 FROM eclipse-temurin:17-jre-alpine
+LABEL version="0.1.0"
+LABEL description="Lumina - High-performance LLM API Gateway"
 WORKDIR /app
 RUN apk add --no-cache redis
 COPY --from=build /app/target/*.jar app.jar

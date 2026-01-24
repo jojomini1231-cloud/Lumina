@@ -23,7 +23,7 @@ public class GeminiModelsExecutor extends AbstractRequestExecutor {
     @Override
     public Mono<ObjectNode> executeNormal(ObjectNode request, ModelGroupConfigItem provider, Map<String, String> queryParams, String modelAction, String type, Integer timeoutMs) {
         RequestLogContext ctx = createLogContext(request, provider, type, false);
-        return createWebClient(provider).post()
+        Mono<ObjectNode> result = createWebClient(provider).post()
                 .uri(uriBuilder -> {
                     uriBuilder.path("/v1beta/models" + (!modelAction.isEmpty() ? "/" + modelAction : ""));
                     queryParams.forEach(uriBuilder::queryParam);
@@ -33,7 +33,9 @@ public class GeminiModelsExecutor extends AbstractRequestExecutor {
                 .accept(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .retrieve()
-                .bodyToMono(ObjectNode.class)
+                .bodyToMono(ObjectNode.class);
+
+        return applyTimeout(result, timeoutMs)
                 .doOnNext(resp -> {
                     handleUsage(ctx, resp);
                     recordSuccess(ctx, resp.toString());
@@ -44,7 +46,7 @@ public class GeminiModelsExecutor extends AbstractRequestExecutor {
     @Override
     public Flux<ServerSentEvent<String>> executeStream(ObjectNode request, ModelGroupConfigItem provider, Map<String, String> queryParams, String modelAction, String type, Integer timeoutMs) {
         RequestLogContext ctx = createLogContext(request, provider, type, true);
-        return createWebClient(provider).post()
+        Flux<ServerSentEvent<String>> result = createWebClient(provider).post()
                 .uri(uriBuilder -> {
                     uriBuilder.path("/v1beta/models" + (!modelAction.isEmpty() ? "/" + modelAction : ""));
                     queryParams.forEach(uriBuilder::queryParam);
@@ -55,7 +57,9 @@ public class GeminiModelsExecutor extends AbstractRequestExecutor {
                 .bodyValue(request)
                 .retrieve()
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
-                .log("SSE-FLOW")
+                .log("SSE-FLOW");
+
+        return applyTimeout(result, timeoutMs)
                 .doOnNext(event -> {
                     String data = event.data();
                     if (data == null) return;

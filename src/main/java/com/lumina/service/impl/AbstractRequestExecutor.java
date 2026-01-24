@@ -16,9 +16,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.util.UUID;
 
 @Slf4j
@@ -165,5 +168,25 @@ public abstract class AbstractRequestExecutor implements LlmRequestExecutor {
                 .baseUrl(provider.getBaseUrl())
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + provider.getApiKey())
                 .build();
+    }
+
+    /**
+     * 应用超时到 Mono，如果 timeoutMs 有效
+     */
+    protected <T> Mono<T> applyTimeout(Mono<T> mono, Integer timeoutMs) {
+        if (timeoutMs != null && timeoutMs > 0) {
+            return mono.timeout(Duration.ofMillis(timeoutMs));
+        }
+        return mono;
+    }
+
+    /**
+     * 应用超时到 Flux，如果 timeoutMs 有效
+     */
+    protected <T> Flux<T> applyTimeout(Flux<T> flux, Integer timeoutMs) {
+        if (timeoutMs != null && timeoutMs > 0) {
+            return flux.timeout(Duration.ofMillis(timeoutMs));
+        }
+        return flux;
     }
 }

@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { 
-  LayoutDashboard, 
-  Network, 
-  Layers, 
-  DollarSign, 
-  ScrollText, 
-  Settings, 
-  Menu, 
+import {
+  LayoutDashboard,
+  Network,
+  Layers,
+  DollarSign,
+  ScrollText,
+  Settings,
+  Menu,
   X,
   Zap,
   LogOut
@@ -14,6 +14,9 @@ import {
 import { ViewState } from '../types';
 import { useLanguage } from './LanguageContext';
 import { useAuth } from './AuthContext';
+
+// 声明全局变量类型
+declare const __APP_VERSION__: string;
 
 interface LayoutProps {
   currentView: ViewState;
@@ -75,7 +78,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onChangeView, child
                     </div>
                     <div className="flex flex-col overflow-hidden">
                         <span className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate max-w-[80px]">{user?.username || 'Admin'}</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400">v1.2.0</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400">v{__APP_VERSION__}</span>
                     </div>
                 </div>
                 <button 

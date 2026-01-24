@@ -23,7 +23,7 @@ public class AnthropicRequestExecutor extends AbstractRequestExecutor {
     @Override
     public Mono<ObjectNode> executeNormal(ObjectNode request, ModelGroupConfigItem provider, Map<String, String> queryParams,String modelAction, String type, Integer timeoutMs) {
         RequestLogContext ctx = createLogContext(request, provider, type, false);
-        return createWebClient(provider).post()
+        Mono<ObjectNode> result = createWebClient(provider).post()
                 .uri(uriBuilder -> {
                     uriBuilder.path("/v1/messages");
                     queryParams.forEach(uriBuilder::queryParam);
@@ -33,9 +33,11 @@ public class AnthropicRequestExecutor extends AbstractRequestExecutor {
                 .accept(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .retrieve()
-                .bodyToMono(ObjectNode.class)
+                .bodyToMono(ObjectNode.class);
+
+        return applyTimeout(result, timeoutMs)
                 .doOnNext(resp -> {
-                    handleUsage(ctx, resp); 
+                    handleUsage(ctx, resp);
                     recordSuccess(ctx, resp.toString());
                 })
                 .doOnError(err -> recordError(ctx, err));
@@ -44,7 +46,7 @@ public class AnthropicRequestExecutor extends AbstractRequestExecutor {
     @Override
     public Flux<ServerSentEvent<String>> executeStream(ObjectNode request, ModelGroupConfigItem provider, Map<String, String> queryParams,String modelAction, String type, Integer timeoutMs) {
         RequestLogContext ctx = createLogContext(request, provider, type, true);
-        return createWebClient(provider).post()
+        Flux<ServerSentEvent<String>> result = createWebClient(provider).post()
                 .uri(uriBuilder -> {
                     uriBuilder.path("/v1/messages");
                     queryParams.forEach(uriBuilder::queryParam);
@@ -54,7 +56,9 @@ public class AnthropicRequestExecutor extends AbstractRequestExecutor {
                 .accept(MediaType.TEXT_EVENT_STREAM)
                 .bodyValue(request)
                 .retrieve()
-                .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
+                .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {});
+
+        return applyTimeout(result, timeoutMs)
                 .doOnNext(event -> {
                     String data = event.data();
                     if (data == null) return;

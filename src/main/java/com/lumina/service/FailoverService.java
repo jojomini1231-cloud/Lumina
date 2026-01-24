@@ -139,10 +139,6 @@ public class FailoverService {
 
         Mono<ObjectNode> result = callFunction.apply(item);
 
-        if (timeoutMs != null && timeoutMs > 0) {
-            result = result.timeout(Duration.ofMillis(timeoutMs));
-        }
-
         return result
                 .doOnSuccess(response -> {
                     long duration = System.currentTimeMillis() - startTime;
@@ -195,10 +191,6 @@ public class FailoverService {
         java.util.concurrent.atomic.AtomicBoolean firstChunk = new java.util.concurrent.atomic.AtomicBoolean(true);
 
         Flux<ServerSentEvent<String>> result = callFunction.apply(item);
-
-        if (timeoutMs != null && timeoutMs > 0) {
-            result = result.timeout(Duration.ofMillis(timeoutMs));
-        }
 
         return result
                 .doOnNext(event -> firstChunk.compareAndSet(true, false))
