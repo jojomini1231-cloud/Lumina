@@ -81,7 +81,7 @@ public class ProviderModelSyncJob {
                     }
 
                 } catch (Exception e) {
-                    log.error("同步供应商 [{}] 模型时发生异常", provider.getName(), e);
+                    log.error("同步供应商 [{}] 模型时发生异常：{}", provider.getName(), e.getMessage());
                     failureCount++;
                 }
             }
