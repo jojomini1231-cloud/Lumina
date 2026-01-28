@@ -35,7 +35,7 @@ const translations = {
     },
     nav: {
       dashboard: '仪表盘',
-      channels: '供应商管理',
+      providers: '供应商管理',
       groups: '分组管理',
       pricing: '价格管理',
       logs: '日志系统',
@@ -53,7 +53,7 @@ const translations = {
       tokenUsage: '模型 Token 使用分布',
       recentActivity: '近期 API 调用',
       viewLogs: '查看所有日志',
-      viewChannels: '管理供应商',
+      viewProviders: '管理供应商',
       table: {
         timestamp: '时间戳',
         model: '模型',
@@ -71,7 +71,7 @@ const translations = {
         },
         columns: {
            rank: '排名',
-           channel: '供应商名称',
+           provider: '供应商名称',
            status: '状态'
         },
         status: {
@@ -85,10 +85,10 @@ const translations = {
         }
       }
     },
-    channels: {
+    providers: {
       title: '供应商管理',
       subtitle: '管理上游供应商及 API 密钥',
-      addChannel: '添加供应商',
+      addProvider: '添加供应商',
       provider: '供应商',
       baseUrl: 'API 地址',
       modal: {
@@ -119,7 +119,7 @@ const translations = {
       title: '分组与路由',
       subtitle: '配置负载均衡策略与路由规则',
       createGroup: '新建分组',
-      activeChannels: '活跃供应商',
+      activeProviders: '活跃供应商',
       modal: {
         titleAdd: '新建分组',
         titleEdit: '编辑分组',
@@ -271,7 +271,7 @@ const translations = {
     },
     nav: {
       dashboard: 'Dashboard',
-      channels: 'Providers',
+      providers: 'Providers',
       groups: 'Groups',
       pricing: 'Pricing',
       logs: 'Logs',
@@ -289,7 +289,7 @@ const translations = {
       tokenUsage: 'Token Usage by Model',
       recentActivity: 'Recent API Calls',
       viewLogs: 'View All Logs',
-      viewChannels: 'Manage Providers',
+      viewProviders: 'Manage Providers',
       table: {
         timestamp: 'Timestamp',
         model: 'Model',
@@ -307,7 +307,7 @@ const translations = {
         },
         columns: {
            rank: 'Rank',
-           channel: 'Provider Name',
+           provider: 'Provider Name',
            status: 'Status'
         },
         status: {
@@ -321,10 +321,10 @@ const translations = {
         }
       }
     },
-    channels: {
+    providers: {
       title: 'Providers',
       subtitle: 'Manage upstream providers and API keys.',
-      addChannel: 'Add Provider',
+      addProvider: 'Add Provider',
       provider: 'Provider',
       baseUrl: 'Base URL',
       modal: {
@@ -355,7 +355,7 @@ const translations = {
       title: 'Groups & Routing',
       subtitle: 'Configure load balancing strategies and routing rules.',
       createGroup: 'Create Group',
-      activeChannels: 'Active Providers',
+      activeProviders: 'Active Providers',
       modal: {
         titleAdd: 'Create Group',
         titleEdit: 'Edit Group',

@@ -42,3 +42,4 @@ data
 **.text
 
 node_modules
+dist

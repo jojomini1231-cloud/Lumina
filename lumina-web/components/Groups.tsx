@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Group, LoadBalanceMode, Channel } from '../types';
+import { Group, LoadBalanceMode, Provider } from '../types';
 import { Layers, Shuffle, ArrowRightLeft, Scale, PlayCircle, Plus, Settings2, Trash2, X, Save, Check, ChevronDown, ChevronRight, AlertTriangle, Loader2, Search, Filter, Activity } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
 import { groupService } from '../services/groupService';
@@ -10,7 +10,7 @@ export const Groups: React.FC = () => {
   
   // Data State
   const [groups, setGroups] = useState<Group[]>([]);
-  const [channels, setChannels] = useState<Channel[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
   // Modal & Edit State
@@ -36,12 +36,12 @@ export const Groups: React.FC = () => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [groupsData, channelsData] = await Promise.all([
+      const [groupsData, providersData] = await Promise.all([
         groupService.getList(),
         providerService.getList()
       ]);
       setGroups(groupsData);
-      setChannels(channelsData);
+      setProviders(providersData);
     } catch (error) {
       console.error("Failed to fetch data:", error);
       // Optional: Show toast error here
@@ -94,8 +94,8 @@ export const Groups: React.FC = () => {
     setEditingGroup(group);
     setFormData({ ...group });
     // Only expand providers that are currently used in the group
-    const usedChannelIds = Array.from(new Set(group.targets.map(t => t.channelId)));
-    setExpandedProviders(usedChannelIds);
+    const usedProviderIds = Array.from(new Set(group.targets.map(t => t.providerId)));
+    setExpandedProviders(usedProviderIds);
     setModelFilter('');
     // Default to viewing selected only when editing to show current configuration clearly
     setViewSelectedOnly(true);
@@ -138,44 +138,44 @@ export const Groups: React.FC = () => {
     }
   };
 
-  const toggleTargetSelection = (channelId: string, model: string) => {
+  const toggleTargetSelection = (providerId: string, model: string) => {
     const currentTargets = formData.targets || [];
-    const exists = currentTargets.some(t => t.channelId === channelId && t.model === model);
-    
+    const exists = currentTargets.some(t => t.providerId === providerId && t.model === model);
+
     if (exists) {
         setFormData({
             ...formData,
-            targets: currentTargets.filter(t => !(t.channelId === channelId && t.model === model))
+            targets: currentTargets.filter(t => !(t.providerId === providerId && t.model === model))
         });
     } else {
         setFormData({
             ...formData,
-            targets: [...currentTargets, { channelId, model }]
+            targets: [...currentTargets, { providerId, model }]
         });
     }
   };
 
-  const toggleProviderExpand = (channelId: string) => {
-    if (expandedProviders.includes(channelId)) {
-        setExpandedProviders(expandedProviders.filter(id => id !== channelId));
+  const toggleProviderExpand = (providerId: string) => {
+    if (expandedProviders.includes(providerId)) {
+        setExpandedProviders(expandedProviders.filter(id => id !== providerId));
     } else {
-        setExpandedProviders([...expandedProviders, channelId]);
+        setExpandedProviders([...expandedProviders, providerId]);
     }
   };
-  
+
   // Helper to find provider name
   const getProviderName = (id: string) => {
-      const channel = channels.find(c => c.id === id);
-      return channel ? channel.name : `Provider #${id}`;
+      const provider = providers.find(c => c.id === id);
+      return provider ? provider.name : `Provider #${id}`;
   };
 
-  const activeChannels = channels.filter(c => c.status === 'active');
+  const activeProviders = providers.filter(c => c.status === 'active');
 
   // Logic to identify selected targets that are invalid (missing provider or missing model)
   const invalidTargets = formData.targets?.filter(t => {
-    const channel = channels.find(c => c.id === t.channelId);
-    if (!channel) return true; // Provider does not exist
-    if (!channel.models.includes(t.model)) return true; // Model does not exist in provider
+    const provider = providers.find(c => c.id === t.providerId);
+    if (!provider) return true; // Provider does not exist
+    if (!provider.models.includes(t.model)) return true; // Model does not exist in provider
     return false;
   }) || [];
 
@@ -271,22 +271,22 @@ export const Groups: React.FC = () => {
                         </div>
 
                         <div className="space-y-3">
-                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('groups.activeChannels')}</p>
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('groups.activeProviders')}</p>
                             {group.targets.length === 0 ? (
                             <p className="text-sm text-slate-400 italic">No models selected</p>
                             ) : (
                             <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
                                 {group.targets.map((target, idx) => {
-                                    const provider = channels.find(c => c.id === target.channelId);
+                                    const provider = providers.find(c => c.id === target.providerId);
                                     const isProviderMissing = !provider;
                                     const isModelMissing = provider && !provider.models.includes(target.model);
                                     const isInvalid = isProviderMissing || isModelMissing;
 
                                     return (
-                                    <div key={`${target.channelId}-${target.model}-${idx}`} className={`flex items-center justify-between text-xs p-2 rounded border ${isInvalid ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-100'}`}>
+                                    <div key={`${target.providerId}-${target.model}-${idx}`} className={`flex items-center justify-between text-xs p-2 rounded border ${isInvalid ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-100'}`}>
                                         <div className="flex flex-col overflow-hidden">
                                             <span className={`font-semibold truncate ${isInvalid ? 'text-red-700' : 'text-slate-700'}`}>
-                                                {isProviderMissing ? `Unknown Provider (${target.channelId})` : provider?.name}
+                                                {isProviderMissing ? `Unknown Provider (${target.providerId})` : provider?.name}
                                             </span>
                                             <div className="flex items-center gap-1.5">
                                                 <span className={`font-mono mt-0.5 truncate ${isInvalid ? 'text-red-600' : 'text-slate-500'}`}>
@@ -415,19 +415,19 @@ export const Groups: React.FC = () => {
                                     </div>
                                     <div className="space-y-2">
                                         {invalidTargets.map((target, idx) => {
-                                            const channel = channels.find(c => c.id === target.channelId);
-                                            const isProviderMissing = !channel;
+                                            const provider = providers.find(c => c.id === target.providerId);
+                                            const isProviderMissing = !provider;
                                             return (
-                                                <div 
-                                                    key={`invalid-${target.channelId}-${target.model}-${idx}`}
-                                                    onClick={() => toggleTargetSelection(target.channelId, target.model)}
+                                                <div
+                                                    key={`invalid-${target.providerId}-${target.model}-${idx}`}
+                                                    onClick={() => toggleTargetSelection(target.providerId, target.model)}
                                                     className="flex items-center justify-between p-2 bg-white border border-red-100 rounded text-xs cursor-pointer hover:bg-red-50 transition-colors group"
                                                     title="Click to remove"
                                                 >
                                                     <div className="flex items-center gap-2 overflow-hidden">
                                                         <div className="flex flex-col">
                                                             <span className="font-semibold text-red-700 truncate">
-                                                                {isProviderMissing ? `Unknown Provider (${target.channelId})` : channel?.name}
+                                                                {isProviderMissing ? `Unknown Provider (${target.providerId})` : provider?.name}
                                                             </span>
                                                             <span className="font-mono text-red-600 truncate">
                                                                 {target.model}
@@ -446,17 +446,17 @@ export const Groups: React.FC = () => {
                             )}
 
                             <div className="border border-slate-200 rounded-lg bg-slate-50 overflow-hidden">
-                                {activeChannels.length === 0 ? (
+                                {activeProviders.length === 0 ? (
                                     <div className="p-4 text-center text-sm text-slate-500">
                                         No active providers available. Please add and enable a provider first.
                                     </div>
                                 ) : (
-                                    channels.map((channel) => {
-                                        // Filter out inactive channels (unless in viewSelectedOnly mode where logic handles check, but here we strictly hide inactive)
-                                        if (channel.status !== 'active') return null;
+                                    providers.map((provider) => {
+                                        // Filter out inactive providers (unless in viewSelectedOnly mode where logic handles check, but here we strictly hide inactive)
+                                        if (provider.status !== 'active') return null;
 
                                         // 1. Filter models based on search term
-                                        let displayModels = channel.models;
+                                        let displayModels = provider.models;
 
                                         if (modelFilter) {
                                             displayModels = displayModels.filter(m => m.toLowerCase().includes(modelFilter.toLowerCase()));
@@ -464,27 +464,27 @@ export const Groups: React.FC = () => {
 
                                         // 2. Filter by View Selected
                                         if (viewSelectedOnly) {
-                                            displayModels = displayModels.filter(m => formData.targets?.some(t => t.channelId === channel.id && t.model === m));
+                                            displayModels = displayModels.filter(m => formData.targets?.some(t => t.providerId === provider.id && t.model === m));
                                         }
 
-                                        // If filtering and no match, hide channel
+                                        // If filtering and no match, hide provider
                                         if ((modelFilter || viewSelectedOnly) && displayModels.length === 0) return null;
-                                        
+
                                         // Determine if expanded: manual expansion OR auto-expand when filtering
-                                        const isExpanded = expandedProviders.includes(channel.id) || modelFilter.length > 0 || viewSelectedOnly;
-                                        const selectedCount = formData.targets?.filter(t => t.channelId === channel.id).length || 0;
+                                        const isExpanded = expandedProviders.includes(provider.id) || modelFilter.length > 0 || viewSelectedOnly;
+                                        const selectedCount = formData.targets?.filter(t => t.providerId === provider.id).length || 0;
 
                                         return (
-                                            <div key={channel.id} className="border-b border-slate-200 last:border-0">
-                                                <div 
-                                                    onClick={() => toggleProviderExpand(channel.id)}
+                                            <div key={provider.id} className="border-b border-slate-200 last:border-0">
+                                                <div
+                                                    onClick={() => toggleProviderExpand(provider.id)}
                                                     className="flex items-center justify-between p-3 bg-white cursor-pointer hover:bg-slate-50 transition-colors"
                                                 >
                                                     <div className="flex items-center">
                                                         <span className="text-slate-400 mr-2">
                                                             {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                                                         </span>
-                                                        <span className="font-medium text-slate-700">{channel.name}</span>
+                                                        <span className="font-medium text-slate-700">{provider.name}</span>
                                                         {selectedCount > 0 && (
                                                             <span className="ml-2 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-full">
                                                                 {selectedCount}
@@ -493,18 +493,18 @@ export const Groups: React.FC = () => {
                                                     </div>
                                                     <span className="text-xs text-slate-400 uppercase">API</span>
                                                 </div>
-                                                
+
                                                 {isExpanded && (
                                                     <div className="bg-slate-50 p-2 space-y-1 shadow-inner">
                                                         {displayModels.map((model) => {
-                                                            const isSelected = formData.targets?.some(t => t.channelId === channel.id && t.model === model);
+                                                            const isSelected = formData.targets?.some(t => t.providerId === provider.id && t.model === model);
                                                             return (
-                                                                <div 
-                                                                    key={`${channel.id}-${model}`}
-                                                                    onClick={() => toggleTargetSelection(channel.id, model)}
+                                                                <div
+                                                                    key={`${provider.id}-${model}`}
+                                                                    onClick={() => toggleTargetSelection(provider.id, model)}
                                                                     className={`flex items-center p-2 rounded cursor-pointer transition-all ${
-                                                                        isSelected 
-                                                                        ? 'bg-white text-indigo-700 border border-indigo-200 shadow-sm' 
+                                                                        isSelected
+                                                                        ? 'bg-white text-indigo-700 border border-indigo-200 shadow-sm'
                                                                         : 'text-slate-600 hover:bg-slate-100 border border-transparent'
                                                                     }`}
                                                                 >

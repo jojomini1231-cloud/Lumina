@@ -31,7 +31,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onChangeView, child
 
   const navItems = [
     { id: 'dashboard' as ViewState, label: t('nav.dashboard'), icon: LayoutDashboard },
-    { id: 'channels' as ViewState, label: t('nav.channels'), icon: Network },
+    { id: 'providers' as ViewState, label: t('nav.providers'), icon: Network },
     { id: 'groups' as ViewState, label: t('nav.groups'), icon: Layers },
     { id: 'pricing' as ViewState, label: t('nav.pricing'), icon: DollarSign },
     { id: 'logs' as ViewState, label: t('nav.logs'), icon: ScrollText },

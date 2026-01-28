@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Channel, ProviderType } from '../types';
+import { Provider, ProviderType } from '../types';
 import { Plus, MoreHorizontal, CheckCircle2, AlertCircle, Trash2, Key, RefreshCcw, X, Save, Edit2, Activity, DownloadCloud, Loader2, AlertTriangle, Check } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
 import { providerService } from '../services/providerService';
@@ -39,11 +39,11 @@ export const getProviderLabel = (type: ProviderType): string => {
   }
 };
 
-export const Channels: React.FC = () => {
-  const [channels, setChannels] = useState<Channel[]>([]);
+export const Providers: React.FC = () => {
+  const [providers, setProviders] = useState<Provider[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
+  const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   
@@ -52,7 +52,7 @@ export const Channels: React.FC = () => {
   const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, id: string | null, name: string}>({ isOpen: false, id: null, name: '' });
 
   // Form State
-  const [formData, setFormData] = useState<Partial<Channel>>({
+  const [formData, setFormData] = useState<Partial<Provider>>({
     name: '',
     type: ProviderType.NEW_API,
     baseUrl: '',
@@ -74,21 +74,21 @@ export const Channels: React.FC = () => {
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
   };
 
-  const fetchChannels = async () => {
+  const fetchProviders = async () => {
     setIsLoading(true);
     try {
-      const data = await providerService.getList();
-      setChannels(data);
+      const data = await providerService.getPage();
+      setProviders(data);
     } catch (error) {
-      console.error("Failed to fetch channels:", error);
-      showToast('Failed to load channels', 'error');
+      console.error("Failed to fetch providers:", error);
+      showToast('Failed to load providers', 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchChannels();
+    fetchProviders();
   }, []);
 
   useEffect(() => {
@@ -102,7 +102,7 @@ export const Channels: React.FC = () => {
   }, []);
 
   const handleOpenAdd = () => {
-    setEditingChannel(null);
+    setEditingProvider(null);
     setFormData({
       name: '',
       type: ProviderType.NEW_API,
@@ -117,9 +117,9 @@ export const Channels: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (channel: Channel) => {
-    setEditingChannel(channel);
-    setFormData(channel);
+  const handleOpenEdit = (provider: Provider) => {
+    setEditingProvider(provider);
+    setFormData(provider);
     setModelsInput('');
     setIsSyncing(false);
     setIsModalOpen(true);
@@ -139,9 +139,9 @@ export const Channels: React.FC = () => {
     try {
       await providerService.delete(deleteModal.id);
       showToast('Provider deleted successfully', 'success');
-      fetchChannels(); 
+      fetchProviders();
     } catch (error) {
-      console.error("Failed to delete channel:", error);
+      console.error("Failed to delete provider:", error);
       showToast('Failed to delete provider', 'error');
     } finally {
       setDeleteModal({ isOpen: false, id: null, name: '' });
@@ -149,20 +149,20 @@ export const Channels: React.FC = () => {
   };
 
   const handleToggleStatus = async (id: string, currentStatus: 'active' | 'inactive') => {
-    const channelToUpdate = channels.find(c => c.id === id);
-    if (!channelToUpdate) return;
+    const providerToUpdate = providers.find(c => c.id === id);
+    if (!providerToUpdate) return;
 
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    
+
     // Optimistic Update
-    setChannels(channels.map(c => c.id === id ? { ...c, status: newStatus } : c));
+    setProviders(providers.map(c => c.id === id ? { ...c, status: newStatus } : c));
 
     try {
-      await providerService.update(id, { ...channelToUpdate, status: newStatus });
+      await providerService.update(id, { ...providerToUpdate, status: newStatus });
     } catch (error) {
       console.error("Failed to update status:", error);
       // Revert on failure
-      setChannels(channels.map(c => c.id === id ? { ...c, status: currentStatus } : c));
+      setProviders(providers.map(c => c.id === id ? { ...c, status: currentStatus } : c));
       showToast('Failed to update status', 'error');
     }
   };
@@ -181,39 +181,39 @@ export const Channels: React.FC = () => {
 
     // Form Validation
     if (!formData.name?.trim()) {
-      showToast(t('channels.validation.name'), 'error');
+      showToast(t('providers.validation.name'), 'error');
       return;
     }
     if (!formData.baseUrl?.trim()) {
-      showToast(t('channels.validation.baseUrl'), 'error');
+      showToast(t('providers.validation.baseUrl'), 'error');
       return;
     }
     if (!formData.apiKey?.trim()) {
-      showToast(t('channels.validation.apiKey'), 'error');
+      showToast(t('providers.validation.apiKey'), 'error');
       return;
     }
     if (currentModels.length === 0) {
-      showToast(t('channels.validation.models'), 'error');
+      showToast(t('providers.validation.models'), 'error');
       return;
     }
-    
+
     const payload = {
-      ...formData as Channel,
+      ...formData as Provider,
       models: currentModels,
     };
-    
+
     try {
-      if (editingChannel) {
-        await providerService.update(editingChannel.id, payload);
+      if (editingProvider) {
+        await providerService.update(editingProvider.id, payload);
         showToast('Provider updated successfully', 'success');
       } else {
         await providerService.create(payload);
         showToast('Provider created successfully', 'success');
       }
       setIsModalOpen(false);
-      fetchChannels();
+      fetchProviders();
     } catch (error) {
-      console.error("Failed to save channel:", error);
+      console.error("Failed to save provider:", error);
       showToast('Failed to save provider', 'error');
     }
   };
@@ -233,26 +233,26 @@ export const Channels: React.FC = () => {
   const handleTestConnection = (id: string) => {
       // Simulation or API call if available
       const latency = Math.floor(Math.random() * 500) + 50;
-      setChannels(channels.map(c => c.id === id ? { ...c, latency } : c));
+      setProviders(providers.map(c => c.id === id ? { ...c, latency } : c));
       setActiveMenuId(null);
       showToast(`Connection active. Latency: ${latency}ms`, 'success');
   };
 
   const handleSyncModels = async (id: string) => {
-      const channel = channels.find(c => c.id === id);
-      if (!channel) return;
+      const provider = providers.find(c => c.id === id);
+      if (!provider) return;
 
       setActiveMenuId(null);
       showToast('Syncing models...', 'info');
 
       try {
-        const models = await providerService.syncModels(channel.baseUrl, channel.apiKey);
-        
+        const models = await providerService.syncModels(provider.baseUrl, provider.apiKey);
+
         // Update the provider with the new models
-        await providerService.update(channel.id, { ...channel, models });
-        
+        await providerService.update(provider.id, { ...provider, models });
+
         showToast(`Synced ${models.length} models`, 'success');
-        fetchChannels();
+        fetchProviders();
       } catch (error) {
         console.error("Sync failed", error);
         showToast('Failed to sync models', 'error');
@@ -292,7 +292,7 @@ export const Channels: React.FC = () => {
 
   const handleSyncModelsFromForm = async () => {
     if (!formData.baseUrl || !formData.apiKey) {
-       showToast(t('channels.validation.baseUrl') + ' / ' + t('channels.validation.apiKey'), 'error');
+       showToast(t('providers.validation.baseUrl') + ' / ' + t('providers.validation.apiKey'), 'error');
        return;
     }
 
@@ -357,15 +357,15 @@ export const Channels: React.FC = () => {
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('channels.title')}</h1>
-          <p className="text-slate-500 mt-1">{t('channels.subtitle')}</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t('providers.title')}</h1>
+          <p className="text-slate-500 mt-1">{t('providers.subtitle')}</p>
         </div>
-        <button 
+        <button
             onClick={handleOpenAdd}
             className="flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors shadow-sm shadow-indigo-200"
         >
           <Plus size={18} className="mr-2" />
-          {t('channels.addChannel')}
+          {t('providers.addChannel')}
         </button>
       </div>
 
@@ -375,49 +375,49 @@ export const Channels: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {channels.length === 0 ? (
+          {providers.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-xl border border-dashed border-slate-300">
                <p className="text-slate-500">No providers found. Add one to get started.</p>
             </div>
           ) : (
-             channels.map((channel) => (
-            <div key={channel.id} className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow relative">
+             providers.map((provider) => (
+            <div key={provider.id} className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow relative">
               <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                 
                 <div className="flex items-start gap-3 sm:gap-4 w-full overflow-hidden">
-                  <div className={`w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center text-xs font-bold border ${getProviderBadge(channel.type)}`}>
-                    {getProviderLabel(channel.type).substring(0, 2).toUpperCase()}
+                  <div className={`w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center text-xs font-bold border ${getProviderBadge(provider.type)}`}>
+                    {getProviderLabel(provider.type).substring(0, 2).toUpperCase()}
                   </div>
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-1">
-                      <h3 className="font-semibold text-slate-900 text-base sm:text-lg truncate max-w-full">{channel.name}</h3>
+                      <h3 className="font-semibold text-slate-900 text-base sm:text-lg truncate max-w-full">{provider.name}</h3>
                       
                       {/* List Toggle Switch */}
                       <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 shrink-0">
                           <StatusSwitch 
-                              checked={channel.status === 'active'}
-                              onChange={() => handleToggleStatus(channel.id, channel.status)}
+                              checked={provider.status === 'active'}
+                              onChange={() => handleToggleStatus(provider.id, provider.status)}
                           />
-                          <span className={`text-xs font-medium ${channel.status === 'active' ? 'text-green-600' : 'text-slate-500'}`}>
-                              {t(`common.${channel.status}`)}
+                          <span className={`text-xs font-medium ${provider.status === 'active' ? 'text-green-600' : 'text-slate-500'}`}>
+                              {t(`common.${provider.status}`)}
                           </span>
                       </div>
                     </div>
                     
-                    <div className="text-xs sm:text-sm text-slate-500 mt-1 font-mono break-all leading-relaxed">{channel.baseUrl}</div>
+                    <div className="text-xs sm:text-sm text-slate-500 mt-1 font-mono break-all leading-relaxed">{provider.baseUrl}</div>
                     
                     <div className="flex flex-wrap items-center gap-2 mt-3 text-xs text-slate-500">
                       <span className="flex items-center bg-slate-50 px-2 py-1 rounded border border-slate-100 font-mono whitespace-nowrap">
                           <Key size={12} className="mr-1.5 flex-shrink-0" />
-                          {channel.apiKey ? (channel.apiKey.length > 10 ? channel.apiKey.substring(0, 6) + '...' + channel.apiKey.substring(channel.apiKey.length - 4) : '******') : 'No Key'}
+                          {provider.apiKey ? (provider.apiKey.length > 10 ? provider.apiKey.substring(0, 6) + '...' + provider.apiKey.substring(provider.apiKey.length - 4) : '******') : 'No Key'}
                       </span>
                       <span className="flex items-center bg-slate-50 px-2 py-1 rounded border border-slate-100 whitespace-nowrap">
                           <RefreshCcw size={12} className="mr-1.5 flex-shrink-0" />
-                          {channel.latency}ms {t('common.latency')}
+                          {provider.latency}ms {t('common.latency')}
                       </span>
                       <span className="flex items-center bg-slate-50 px-2 py-1 rounded border border-slate-100 max-w-full">
-                          <span className="truncate">{channel.models.length} Models: {channel.models.join(', ')}</span>
+                          <span className="truncate">{provider.models.length} Models: {provider.models.join(', ')}</span>
                       </span>
                     </div>
                   </div>
@@ -425,37 +425,37 @@ export const Channels: React.FC = () => {
 
                 <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0 relative border-t sm:border-t-0 border-slate-100 pt-3 sm:pt-0">
                   <button 
-                      onClick={() => handleOpenEdit(channel)}
+                      onClick={() => handleOpenEdit(provider)}
                       className="flex-1 sm:flex-none flex items-center justify-center px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
                   >
                       <Edit2 size={16} className="mr-2 sm:hidden" />
                       {t('common.edit')}
                   </button>
                   <button 
-                      onClick={(e) => handleDeleteClick(channel.id, channel.name, e)}
+                      onClick={(e) => handleDeleteClick(provider.id, provider.name, e)}
                       className="flex-1 sm:flex-none flex items-center justify-center p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 border border-slate-200 sm:border-transparent rounded-lg transition-colors"
                   >
                       <Trash2 size={18} />
                   </button>
                   <div className="relative flex-1 sm:flex-none">
                       <button 
-                          onClick={() => setActiveMenuId(activeMenuId === channel.id ? null : channel.id)}
-                          className={`w-full sm:w-auto flex items-center justify-center p-2 rounded-lg transition-colors border border-slate-200 sm:border-transparent ${activeMenuId === channel.id ? 'bg-slate-100 text-slate-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+                          onClick={() => setActiveMenuId(activeMenuId === provider.id ? null : provider.id)}
+                          className={`w-full sm:w-auto flex items-center justify-center p-2 rounded-lg transition-colors border border-slate-200 sm:border-transparent ${activeMenuId === provider.id ? 'bg-slate-100 text-slate-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
                       >
                           <MoreHorizontal size={18} />
                       </button>
                       {/* More Dropdown */}
-                      {activeMenuId === channel.id && (
+                      {activeMenuId === provider.id && (
                           <div ref={menuRef} className="absolute right-0 bottom-full sm:bottom-auto sm:top-full mb-2 sm:mb-0 sm:mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-100 z-10 py-1">
                               <button 
-                                  onClick={() => handleTestConnection(channel.id)}
+                                  onClick={() => handleTestConnection(provider.id)}
                                   className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center"
                               >
                                   <Activity size={14} className="mr-2" />
                                   {t('channels.more.testConnection')}
                               </button>
                               <button 
-                                  onClick={() => handleSyncModels(channel.id)}
+                                  onClick={() => handleSyncModels(provider.id)}
                                   className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center"
                               >
                                   <DownloadCloud size={14} className="mr-2" />
@@ -478,7 +478,7 @@ export const Channels: React.FC = () => {
             <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
                     <h2 className="text-lg font-bold text-slate-900">
-                        {editingChannel ? t('channels.modal.titleEdit') : t('channels.modal.titleAdd')}
+                        {editingProvider ? t('providers.modal.titleEdit') : t('providers.modal.titleAdd')}
                     </h2>
                     <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                         <X size={20} />
@@ -487,7 +487,7 @@ export const Channels: React.FC = () => {
                 <form onSubmit={handleSubmit} className="p-6 space-y-4">
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">
-                            {t('channels.modal.name')} <span className="text-red-500">*</span>
+                            {t('providers.modal.name')} <span className="text-red-500">*</span>
                         </label>
                         <input 
                             type="text" 
@@ -500,7 +500,7 @@ export const Channels: React.FC = () => {
                     
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">
-                            {t('channels.modal.type')} <span className="text-red-500">*</span>
+                            {t('providers.modal.type')} <span className="text-red-500">*</span>
                         </label>
                         <select 
                             value={formData.type}
@@ -517,7 +517,7 @@ export const Channels: React.FC = () => {
 
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">
-                            {t('channels.modal.baseUrl')} <span className="text-red-500">*</span>
+                            {t('providers.modal.baseUrl')} <span className="text-red-500">*</span>
                         </label>
                         <input 
                             type="url" 
@@ -530,14 +530,14 @@ export const Channels: React.FC = () => {
 
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">
-                            {t('channels.modal.apiKey')} <span className="text-red-500">*</span>
+                            {t('providers.modal.apiKey')} <span className="text-red-500">*</span>
                         </label>
                         <input 
                             type="text"
                             required
                             value={formData.apiKey}
                             onChange={(e) => setFormData({...formData, apiKey: e.target.value})}
-                            placeholder={t('channels.modal.apiKeyPlaceholder')}
+                            placeholder={t('providers.modal.apiKeyPlaceholder')}
                             className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border font-mono"
                         />
                     </div>
@@ -545,7 +545,7 @@ export const Channels: React.FC = () => {
                     <div>
                         <div className="flex justify-between items-center mb-1">
                             <label className="block text-sm font-medium text-slate-700">
-                                {t('channels.modal.models')} <span className="text-red-500">*</span>
+                                {t('providers.modal.models')} <span className="text-red-500">*</span>
                             </label>
                             <div className="flex items-center gap-3">
                                 {formData.models && formData.models.length > 0 && (
@@ -566,7 +566,7 @@ export const Channels: React.FC = () => {
                                     className={`text-xs flex items-center font-medium transition-colors ${isSyncing ? 'text-indigo-400 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-700'}`}
                                 >
                                     {isSyncing ? <Loader2 size={12} className="mr-1 animate-spin" /> : <RefreshCcw size={12} className="mr-1" />}
-                                    {t('channels.more.syncModels')}
+                                    {t('providers.more.syncModels')}
                                 </button>
                             </div>
                         </div>
@@ -597,7 +597,7 @@ export const Channels: React.FC = () => {
                                     onBlur={() => {
                                         if(modelsInput.trim()) addModel(modelsInput);
                                     }}
-                                    placeholder={formData.models?.length === 0 ? t('channels.modal.modelsPlaceholder') : ''}
+                                    placeholder={formData.models?.length === 0 ? t('providers.modal.modelsPlaceholder') : ''}
                                     className="flex-1 min-w-[120px] outline-none text-sm font-mono bg-transparent py-1 text-slate-700 placeholder:font-sans"
                                 />
                             </div>
@@ -609,7 +609,7 @@ export const Channels: React.FC = () => {
 
                     <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-50">
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">{t('channels.modal.status')}</label>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">{t('providers.modal.status')}</label>
                             <div className="mt-2">
                                 <StatusSwitch 
                                     checked={formData.status === 'active'}
@@ -619,7 +619,7 @@ export const Channels: React.FC = () => {
                             </div>
                         </div>
                          <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">{t('channels.modal.autoSync')}</label>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">{t('providers.modal.autoSync')}</label>
                             <div className="mt-2">
                                 <StatusSwitch 
                                     checked={formData.autoSync !== false}

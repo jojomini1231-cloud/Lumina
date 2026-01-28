@@ -303,19 +303,19 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
       
-      {/* Channel Ranking Table with Metric Switcher */}
+      {/* Provider Ranking Table with Metric Switcher */}
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h3 className="font-semibold text-slate-900 dark:text-white">{t('dashboard.ranking.title')}</h3>
-            
+
             <div className="flex p-1 bg-slate-100 dark:bg-slate-700/50 rounded-lg overflow-x-auto max-w-full">
                 {metrics.map((m) => (
                     <button
                         key={m}
                         onClick={() => setMetric(m)}
                         className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-all ${
-                            metric === m 
-                            ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm' 
+                            metric === m
+                            ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm'
                             : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                         }`}
                     >
@@ -329,7 +329,7 @@ export const Dashboard: React.FC = () => {
                 <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 font-medium">
                     <tr>
                         <th className="px-6 py-3 w-20">{t('dashboard.ranking.columns.rank')}</th>
-                        <th className="px-6 py-3">{t('dashboard.ranking.columns.channel')}</th>
+                        <th className="px-6 py-3">{t('dashboard.ranking.columns.provider')}</th>
                         <th className="px-6 py-3">{t(`dashboard.ranking.options.${metric}`)}</th>
                         <th className="px-6 py-3">{t('dashboard.ranking.columns.status')}</th>
                     </tr>
@@ -342,21 +342,21 @@ export const Dashboard: React.FC = () => {
                             </td>
                         </tr>
                     ) : (
-                        sortedData.map((channel, index) => {
-                            const statusInfo = getStatusInfo(channel, metric);
+                        sortedData.map((provider, index) => {
+                            const statusInfo = getStatusInfo(provider, metric);
                             return (
-                                <tr key={channel.providerId} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+                                <tr key={provider.providerId} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
                                     <td className="px-6 py-3 font-medium text-slate-500 dark:text-slate-400">#{index + 1}</td>
                                     <td className="px-6 py-3 font-medium text-slate-800 dark:text-slate-200">
-                                        {channel.providerName}
+                                        {provider.providerName}
                                     </td>
                                     <td className="px-6 py-3 text-slate-600 dark:text-slate-300">
                                         <div className="flex items-center gap-3">
-                                            <span className="font-mono w-20">{formatValue(channel)}</span>
+                                            <span className="font-mono w-20">{formatValue(provider)}</span>
                                             <div className="w-24 bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden hidden sm:block">
-                                                <div 
-                                                    className={`h-full ${getProgressBarColor(channel)}`} 
-                                                    style={{ width: getProgressBarWidth(channel, maxValue) }}
+                                                <div
+                                                    className={`h-full ${getProgressBarColor(provider)}`}
+                                                    style={{ width: getProgressBarWidth(provider, maxValue) }}
                                                 ></div>
                                             </div>
                                         </div>

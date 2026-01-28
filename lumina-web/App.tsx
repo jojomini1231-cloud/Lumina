@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
-import { Channels } from './components/Channels';
+import { Providers } from './components/Providers';
 import { Groups } from './components/Groups';
 import { Settings } from './components/Settings';
 import { Logs } from './components/Logs';
@@ -33,8 +33,8 @@ const AppContent: React.FC = () => {
     switch (currentView) {
       case 'dashboard':
         return <Dashboard />;
-      case 'channels':
-        return <Channels />;
+      case 'providers':
+        return <Providers />;
       case 'groups':
         return <Groups />;
       case 'pricing':

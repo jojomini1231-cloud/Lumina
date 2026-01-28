@@ -51,7 +51,7 @@ export const groupService = {
         name: item.name,
         mode: MODE_MAP_TO_FRONTEND[item.balanceMode] || LoadBalanceMode.ROUND_ROBIN,
         targets: (item.groupItems || []).map((gi: GroupItemDTO) => ({
-          channelId: String(gi.providerId),
+          providerId: String(gi.providerId),
           model: gi.modelName,
         })),
         firstTokenTimeout: item.firstTokenTimeout || 3000, 
@@ -68,7 +68,7 @@ export const groupService = {
       balanceMode: MODE_MAP_TO_BACKEND[group.mode || LoadBalanceMode.SAPR] || 5,
       firstTokenTimeout: group.firstTokenTimeout,
       groupItems: group.targets?.map(t => ({
-        providerId: parseInt(t.channelId, 10),
+        providerId: parseInt(t.providerId, 10),
         modelName: t.model,
         weight: 1, // Default weight
         priority: 0 // Default priority
@@ -84,7 +84,7 @@ export const groupService = {
       balanceMode: MODE_MAP_TO_BACKEND[group.mode || LoadBalanceMode.SAPR] || 5,
       firstTokenTimeout: group.firstTokenTimeout,
       groupItems: group.targets?.map(t => ({
-        providerId: parseInt(t.channelId, 10),
+        providerId: parseInt(t.providerId, 10),
         modelName: t.model,
         weight: 1,
         priority: 0

@@ -15,7 +15,7 @@ export enum ProviderType {
   NEW_API = 4,
 }
 
-export interface Channel {
+export interface Provider {
   id: string;
   name: string;
   type: ProviderType;
@@ -28,7 +28,7 @@ export interface Channel {
 }
 
 export interface GroupTarget {
-  channelId: string;
+  providerId: string;
   model: string;
 }
 
@@ -36,7 +36,7 @@ export interface Group {
   id: string;
   name: string;
   mode: LoadBalanceMode;
-  targets: GroupTarget[]; // List of (Channel + Model) targets
+  targets: GroupTarget[]; // List of (Provider + Model) targets
   firstTokenTimeout: number;
 }
 
@@ -89,7 +89,7 @@ export interface DashboardOverview {
     successRateChange: number;
 }
 
-export type ViewState = 'dashboard' | 'channels' | 'groups' | 'pricing' | 'logs' | 'settings';
+export type ViewState = 'dashboard' | 'providers' | 'groups' | 'pricing' | 'logs' | 'settings';
 
 // Auth Types
 
