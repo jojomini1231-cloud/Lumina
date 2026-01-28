@@ -4,6 +4,8 @@ import { Layers, Shuffle, ArrowRightLeft, Scale, PlayCircle, Plus, Settings2, Tr
 import { useLanguage } from './LanguageContext';
 import { groupService } from '../services/groupService';
 import { providerService } from '../services/providerService';
+import { SkeletonGroupCard } from './Skeleton';
+import { AnimatedGroupCard } from './Animated';
 
 export const Groups: React.FC = () => {
   const { t } = useLanguage();
@@ -225,18 +227,20 @@ export const Groups: React.FC = () => {
       )}
 
       {isLoading ? (
-        <div className="flex items-center justify-center h-64">
-           <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
+          <SkeletonGroupCard />
+          <SkeletonGroupCard />
+          <SkeletonGroupCard />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
             {groups.length === 0 ? (
-                <div className="col-span-full text-center py-12 bg-white rounded-xl border border-dashed border-slate-300">
-                    <p className="text-slate-500">No groups found. Create one to get started.</p>
+                <div className="col-span-full text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 animate-in fade-in duration-300">
+                    <p className="text-slate-500 dark:text-slate-400">No groups found. Create one to get started.</p>
                 </div>
             ) : (
-                groups.map((group) => (
-                <div key={group.id} className="group bg-white rounded-xl border border-slate-200 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all duration-200 flex flex-col">
+                groups.map((group, index) => (
+                <AnimatedGroupCard key={group.id} index={index}>
                     <div className="p-6 flex-1">
                         <div className="flex justify-between items-start mb-4">
                             <div className="p-2 bg-slate-100 rounded-lg text-slate-600 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
@@ -315,8 +319,9 @@ export const Groups: React.FC = () => {
                     <span>ID: {group.id}</span>
                     <span className="font-mono">{group.targets.length} targets</span>
                     </div>
-                </div>
-            )))}
+            </AnimatedGroupCard>
+            ))
+            )}
         </div>
       )}
 

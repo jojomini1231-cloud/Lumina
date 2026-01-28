@@ -3,6 +3,7 @@ import { Search, Filter, Download, Loader2, ChevronLeft, ChevronRight, X, Copy, 
 import { useLanguage } from './LanguageContext';
 import { logService, LogDetail } from '../services/logService';
 import { LogEntry } from '../types';
+import { AnimatedTableRow } from './Animated';
 
 export const Logs: React.FC = () => {
   const { t } = useLanguage();
@@ -211,16 +212,16 @@ export const Logs: React.FC = () => {
                                 </th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-slate-200">
+                        <tbody className="bg-white dark:bg-white divide-y divide-slate-200 dark:divide-slate-200">
                             {logs.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-12 text-center text-slate-500 text-sm">
+                                    <td colSpan={8} className="px-6 py-12 text-center text-slate-500 dark:text-slate-400 text-sm">
                                         No logs found
                                     </td>
                                 </tr>
                             ) : (
-                                logs.map((log) => (
-                                    <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                                logs.map((log, index) => (
+                                    <AnimatedTableRow key={log.id} index={index} className="hover:bg-slate-50 dark:hover:bg-slate-100/30">
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                                                 log.status === 'SUCCESS' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
@@ -228,26 +229,26 @@ export const Logs: React.FC = () => {
                                                 {log.status === 'SUCCESS' ? t('common.success') : t('common.fail')}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-mono">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-600 font-mono">
                                             {log.timestamp}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-slate-800">
                                             {log.model}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-600">
                                             {log.providerName}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-600">
                                             {log.latency}ms
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-600">
                                             {log.tokens}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-600">
                                             {log.cost > 0 ? `$${log.cost.toFixed(5)}` : '-'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <button 
+                                            <button
                                                 onClick={() => handleViewLog(log.id)}
                                                 className="text-indigo-600 hover:text-indigo-900 flex items-center justify-end w-full"
                                             >
@@ -255,7 +256,7 @@ export const Logs: React.FC = () => {
                                                 <Eye size={14} className="ml-1" />
                                             </button>
                                         </td>
-                                    </tr>
+                                    </AnimatedTableRow>
                                 ))
                             )}
                         </tbody>

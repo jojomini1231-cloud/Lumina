@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
   BarChart,
   Bar
 } from 'recharts';
@@ -14,6 +14,8 @@ import { ArrowUpRight, ArrowDownRight, Zap, Coins, Clock, Activity } from 'lucid
 import { useLanguage } from './LanguageContext';
 import { dashboardService, ProviderStats } from '../services/dashboardService';
 import { DashboardOverview } from '../types';
+import { SkeletonStatCard, SkeletonChart } from './Skeleton';
+import { AnimatedStatCard, AnimatedTableRow } from './Animated';
 
 const StatCard: React.FC<{
   title: string;
@@ -48,9 +50,11 @@ export const Dashboard: React.FC = () => {
   const [trafficData, setTrafficData] = useState<{ time: string; requests: number }[]>([]);
   const [modelUsageData, setModelUsageData] = useState<{ name: string; tokens: number }[]>([]);
   const [providerRanking, setProviderRanking] = useState<ProviderStats[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+        setIsLoading(true);
         try {
             const [overviewData, trafficRaw, modelUsageRaw, providerStatsRaw] = await Promise.all([
                 dashboardService.getOverview(),
@@ -91,6 +95,8 @@ export const Dashboard: React.FC = () => {
 
         } catch (error) {
             console.error("Failed to load dashboard data", error);
+        } finally {
+            setIsLoading(false);
         }
     };
     fetchDashboardData();
@@ -208,99 +214,126 @@ export const Dashboard: React.FC = () => {
 
       {/* KPI Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          title={t('dashboard.totalRequests')}
-          value={safeOverview.totalRequests.toLocaleString()}
-          trend={`${safeOverview.requestGrowthRate.toFixed(1)}%`}
-          trendDirection={safeOverview.requestGrowthRate >= 0 ? 'up' : 'down'}
-          trendPositive={safeOverview.requestGrowthRate >= 0}
-          icon={Zap}
-          colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
-        />
-        <StatCard
-          title={t('dashboard.totalCost')}
-          value={`$${safeOverview.totalCost.toFixed(4)}`}
-          trend={`${safeOverview.costGrowthRate.toFixed(1)}%`}
-          trendDirection={safeOverview.costGrowthRate >= 0 ? 'up' : 'down'}
-          trendPositive={true} // Growth in cost/usage is often visualized as positive activity in this context
-          icon={Coins}
-          colorClass="bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
-        />
-        <StatCard
-          title={t('dashboard.avgLatency')}
-          value={`${safeOverview.avgLatency.toFixed(0)}ms`}
-          trend={`${Math.abs(safeOverview.latencyChange).toFixed(0)}ms`}
-          trendDirection={safeOverview.latencyChange >= 0 ? 'up' : 'down'}
-          trendPositive={safeOverview.latencyChange <= 0} // Lower latency (negative change) is better (green)
-          icon={Clock}
-          colorClass="bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
-        />
-        <StatCard
-          title={t('dashboard.successRate')}
-          value={`${safeOverview.successRate.toFixed(1)}%`}
-          trend={`${safeOverview.successRateChange.toFixed(1)}%`}
-          trendDirection={safeOverview.successRateChange >= 0 ? 'up' : 'down'}
-          trendPositive={safeOverview.successRateChange >= 0}
-          icon={Activity}
-          colorClass="bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400"
-        />
+        {isLoading ? (
+          <>
+            <SkeletonStatCard />
+            <SkeletonStatCard />
+            <SkeletonStatCard />
+            <SkeletonStatCard />
+          </>
+        ) : (
+          <>
+            <AnimatedStatCard index={0}>
+              <StatCard
+                title={t('dashboard.totalRequests')}
+                value={safeOverview.totalRequests.toLocaleString()}
+                trend={`${safeOverview.requestGrowthRate.toFixed(1)}%`}
+                trendDirection={safeOverview.requestGrowthRate >= 0 ? 'up' : 'down'}
+                trendPositive={safeOverview.requestGrowthRate >= 0}
+                icon={Zap}
+                colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+              />
+            </AnimatedStatCard>
+            <AnimatedStatCard index={1}>
+              <StatCard
+                title={t('dashboard.totalCost')}
+                value={`$${safeOverview.totalCost.toFixed(4)}`}
+                trend={`${safeOverview.costGrowthRate.toFixed(1)}%`}
+                trendDirection={safeOverview.costGrowthRate >= 0 ? 'up' : 'down'}
+                trendPositive={true}
+                icon={Coins}
+                colorClass="bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
+              />
+            </AnimatedStatCard>
+            <AnimatedStatCard index={2}>
+              <StatCard
+                title={t('dashboard.avgLatency')}
+                value={`${safeOverview.avgLatency.toFixed(0)}ms`}
+                trend={`${Math.abs(safeOverview.latencyChange).toFixed(0)}ms`}
+                trendDirection={safeOverview.latencyChange >= 0 ? 'up' : 'down'}
+                trendPositive={safeOverview.latencyChange <= 0}
+                icon={Clock}
+                colorClass="bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
+              />
+            </AnimatedStatCard>
+            <AnimatedStatCard index={3}>
+              <StatCard
+                title={t('dashboard.successRate')}
+                value={`${safeOverview.successRate.toFixed(1)}%`}
+                trend={`${safeOverview.successRateChange.toFixed(1)}%`}
+                trendDirection={safeOverview.successRateChange >= 0 ? 'up' : 'down'}
+                trendPositive={safeOverview.successRateChange >= 0}
+                icon={Activity}
+                colorClass="bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400"
+              />
+            </AnimatedStatCard>
+          </>
+        )}
       </div>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Traffic Chart */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">{t('dashboard.traffic')}</h3>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trafficData}>
-                <defs>
-                  <linearGradient id="colorRequests" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" className="dark:opacity-10" />
-                <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
-                <Tooltip 
-                  contentStyle={{
-                    borderRadius: '8px', 
-                    border: 'none', 
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                    backgroundColor: '#fff',
-                    color: '#000'
-                  }} 
-                />
-                <Area type="monotone" dataKey="requests" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#colorRequests)" />
-              </AreaChart>
-            </ResponsiveContainer>
+        {isLoading ? (
+          <SkeletonChart className="lg:col-span-2" />
+        ) : (
+          <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 animate-in fade-in duration-400">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">{t('dashboard.traffic')}</h3>
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trafficData}>
+                  <defs>
+                    <linearGradient id="colorRequests" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" className="dark:opacity-10" />
+                  <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: '8px',
+                      border: 'none',
+                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                      backgroundColor: '#fff',
+                      color: '#000'
+                    }}
+                  />
+                  <Area type="monotone" dataKey="requests" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#colorRequests)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Top Models Chart */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">{t('dashboard.tokenUsage')}</h3>
-           <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={modelUsageData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" className="dark:opacity-10" />
-                <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  width={140} 
-                  tick={{fill: '#64748b', fontSize: 12}} 
-                  axisLine={false} 
-                  tickLine={false}
-                  tickFormatter={(value) => value.length > 20 ? `${value.substring(0, 18)}...` : value}
-                />
-                <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '8px', color: '#000'}} />
-                <Bar dataKey="tokens" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={32} />
-              </BarChart>
-            </ResponsiveContainer>
+        {isLoading ? (
+          <SkeletonChart />
+        ) : (
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 animate-in fade-in duration-400" style={{ animationDelay: '100ms' }}>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">{t('dashboard.tokenUsage')}</h3>
+             <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={modelUsageData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" className="dark:opacity-10" />
+                  <XAxis type="number" hide />
+                  <YAxis
+                    dataKey="name"
+                    type="category"
+                    width={140}
+                    tick={{fill: '#64748b', fontSize: 12}}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(value) => value.length > 20 ? `${value.substring(0, 18)}...` : value}
+                  />
+                  <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '8px', color: '#000'}} />
+                  <Bar dataKey="tokens" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={32} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-        </div>
+        )}
       </div>
       
       {/* Provider Ranking Table with Metric Switcher */}
@@ -345,7 +378,7 @@ export const Dashboard: React.FC = () => {
                         sortedData.map((provider, index) => {
                             const statusInfo = getStatusInfo(provider, metric);
                             return (
-                                <tr key={provider.providerId} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+                                <AnimatedTableRow key={provider.providerId} index={index}>
                                     <td className="px-6 py-3 font-medium text-slate-500 dark:text-slate-400">#{index + 1}</td>
                                     <td className="px-6 py-3 font-medium text-slate-800 dark:text-slate-200">
                                         {provider.providerName}
@@ -370,7 +403,7 @@ export const Dashboard: React.FC = () => {
                                             <span className="text-slate-400">-</span>
                                         )}
                                     </td>
-                                </tr>
+                                </AnimatedTableRow>
                             );
                         })
                     )}

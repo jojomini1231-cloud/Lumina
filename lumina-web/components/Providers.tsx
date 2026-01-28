@@ -3,6 +3,8 @@ import { Provider, ProviderType } from '../types';
 import { Plus, MoreHorizontal, CheckCircle2, AlertCircle, Trash2, Key, RefreshCcw, X, Save, Edit2, Activity, DownloadCloud, Loader2, AlertTriangle, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
 import { providerService } from '../services/providerService';
+import { SkeletonProviderCard } from './Skeleton';
+import { AnimatedProviderCard } from './Animated';
 
 const StatusSwitch = ({ checked, onChange, disabled = false, label }: { checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean, label?: string }) => (
   <div className="flex items-center cursor-pointer" onClick={(e) => {
@@ -405,19 +407,21 @@ export const Providers: React.FC = () => {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center h-64">
-           <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+        <div className="grid grid-cols-1 gap-4">
+          <SkeletonProviderCard />
+          <SkeletonProviderCard />
+          <SkeletonProviderCard />
         </div>
       ) : (
         <>
         <div className="grid grid-cols-1 gap-4">
           {providers.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-xl border border-dashed border-slate-300">
-               <p className="text-slate-500">No providers found. Add one to get started.</p>
+            <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 animate-in fade-in duration-300">
+               <p className="text-slate-500 dark:text-slate-400">No providers found. Add one to get started.</p>
             </div>
           ) : (
-             providers.map((provider) => (
-            <div key={provider.id} className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow relative">
+             providers.map((provider, index) => (
+            <AnimatedProviderCard key={provider.id} index={index}>
               <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
 
                 <div className="flex items-start gap-3 sm:gap-4 w-full overflow-hidden">
@@ -427,10 +431,10 @@ export const Providers: React.FC = () => {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-1">
-                      <h3 className="font-semibold text-slate-900 text-base sm:text-lg truncate max-w-full">{provider.name}</h3>
+                      <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-base sm:text-lg truncate max-w-full">{provider.name}</h3>
 
                       {/* List Toggle Switch */}
-                      <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 shrink-0">
+                      <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-600 shrink-0">
                           <StatusSwitch
                               checked={provider.status === 'active'}
                               onChange={() => handleToggleStatus(provider.id, provider.status)}
@@ -441,28 +445,28 @@ export const Providers: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="text-xs sm:text-sm text-slate-500 mt-1 font-mono break-all leading-relaxed">{provider.baseUrl}</div>
+                    <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-mono break-all leading-relaxed">{provider.baseUrl}</div>
 
-                    <div className="flex flex-wrap items-center gap-2 mt-3 text-xs text-slate-500">
-                      <span className="flex items-center bg-slate-50 px-2 py-1 rounded border border-slate-100 font-mono whitespace-nowrap">
+                    <div className="flex flex-wrap items-center gap-2 mt-3 text-xs text-slate-500 dark:text-slate-400">
+                      <span className="flex items-center bg-slate-50 dark:bg-slate-900/50 px-2 py-1 rounded border border-slate-100 dark:border-slate-700 font-mono whitespace-nowrap">
                           <Key size={12} className="mr-1.5 flex-shrink-0" />
                           {provider.apiKey ? (provider.apiKey.length > 10 ? provider.apiKey.substring(0, 6) + '...' + provider.apiKey.substring(provider.apiKey.length - 4) : '******') : 'No Key'}
                       </span>
-                      <span className="flex items-center bg-slate-50 px-2 py-1 rounded border border-slate-100 whitespace-nowrap">
+                      <span className="flex items-center bg-slate-50 dark:bg-slate-900/50 px-2 py-1 rounded border border-slate-100 dark:border-slate-700 whitespace-nowrap">
                           <RefreshCcw size={12} className="mr-1.5 flex-shrink-0" />
                           {provider.latency}ms {t('common.latency')}
                       </span>
-                      <span className="flex items-center bg-slate-50 px-2 py-1 rounded border border-slate-100 max-w-full">
+                      <span className="flex items-center bg-slate-50 dark:bg-slate-900/50 px-2 py-1 rounded border border-slate-100 dark:border-slate-700 max-w-full">
                           <span className="truncate">{provider.models.length} Models: {provider.models.join(', ')}</span>
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0 relative border-t sm:border-t-0 border-slate-100 pt-3 sm:pt-0">
+                <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0 relative border-t sm:border-t-0 border-slate-100 dark:border-slate-700 pt-3 sm:pt-0">
                   <button
                       onClick={() => handleOpenEdit(provider)}
-                      className="flex-1 sm:flex-none flex items-center justify-center px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
+                      className="flex-1 sm:flex-none flex items-center justify-center px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-600"
                   >
                       <Edit2 size={16} className="mr-2 sm:hidden" />
                       {t('common.edit')}
@@ -482,17 +486,17 @@ export const Providers: React.FC = () => {
                       </button>
                       {/* More Dropdown */}
                       {activeMenuId === provider.id && (
-                          <div ref={menuRef} className="absolute right-0 bottom-full sm:bottom-auto sm:top-full mb-2 sm:mb-0 sm:mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-100 z-10 py-1">
+                          <div ref={menuRef} className="absolute right-0 bottom-full sm:bottom-auto sm:top-full mb-2 sm:mb-0 sm:mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-100 dark:border-slate-700 z-10 py-1 animate-in zoom-in-95 duration-150">
                               <button
                                   onClick={() => handleTestConnection(provider.id)}
-                                  className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center"
+                                  className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center"
                               >
                                   <Activity size={14} className="mr-2" />
                                   {t('providers.more.testConnection')}
                               </button>
                               <button
                                   onClick={() => handleSyncModels(provider.id)}
-                                  className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center"
+                                  className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center"
                               >
                                   <DownloadCloud size={14} className="mr-2" />
                                   {t('providers.more.syncModels')}
@@ -501,9 +505,8 @@ export const Providers: React.FC = () => {
                       )}
                   </div>
                 </div>
-
               </div>
-            </div>
+            </AnimatedProviderCard>
           )))}
         </div>
 

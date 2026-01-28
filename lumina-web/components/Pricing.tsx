@@ -3,6 +3,8 @@ import { Search, Loader2, ChevronLeft, ChevronRight, BrainCircuit, Wrench, Refre
 import { useLanguage } from './LanguageContext';
 import { modelService } from '../services/modelService';
 import { ModelPrice } from '../types';
+import { SkeletonPricingCard } from './Skeleton';
+import { AnimatedPricingCard } from './Animated';
 
 export const Pricing: React.FC = () => {
   const { t } = useLanguage();
@@ -157,12 +159,12 @@ export const Pricing: React.FC = () => {
             {/* Grid Layout */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5 mb-6">
                 {models.length === 0 ? (
-                    <div className="col-span-full py-12 text-center bg-white rounded-xl border border-dashed border-slate-300">
-                        <p className="text-slate-500">No models found matching your criteria.</p>
+                    <div className="col-span-full py-12 text-center bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 animate-in fade-in duration-300">
+                        <p className="text-slate-500 dark:text-slate-400">No models found matching your criteria.</p>
                     </div>
                 ) : (
                     models.map((model, index) => (
-                        <div key={`${model.modelName}-${model.provider}-${index}`} className="group bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all duration-200 flex flex-col h-full overflow-hidden">
+                        <AnimatedPricingCard key={`${model.modelName}-${model.provider}-${index}`} index={index}>
                             <div className="p-5 flex flex-col h-full">
                                 {/* Header */}
                                 <div className="flex justify-between items-start mb-3">
@@ -237,8 +239,7 @@ export const Pricing: React.FC = () => {
                                         ))}
                                     </div>
                                 </div>
-                            </div>
-                            
+
                             {/* Footer */}
                             <div className="bg-slate-50 px-5 py-2.5 border-t border-slate-100 flex justify-between items-center text-xs text-slate-400">
                                 <div className="flex items-center">
@@ -246,7 +247,8 @@ export const Pricing: React.FC = () => {
                                     <span>{model.lastUpdatedAt}</span>
                                 </div>
                             </div>
-                        </div>
+                            </div>
+                    </AnimatedPricingCard>
                     ))
                 )}
             </div>
