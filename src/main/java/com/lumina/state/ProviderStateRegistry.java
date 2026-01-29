@@ -1,5 +1,6 @@
 package com.lumina.state;
 
+import com.lumina.config.CircuitBreakerConfig;
 import com.lumina.entity.ProviderRuntimeStats;
 import com.lumina.mapper.ProviderRuntimeStatsMapper;
 import jakarta.annotation.PostConstruct;
@@ -17,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ProviderStateRegistry {
 
     private final ProviderRuntimeStatsMapper mapper;
+    private final CircuitBreakerConfig config;
     private final ConcurrentHashMap<String, ProviderRuntimeState> stateMap = new ConcurrentHashMap<>();
 
     @PostConstruct
@@ -24,7 +26,7 @@ public class ProviderStateRegistry {
         try {
             List<ProviderRuntimeStats> list = mapper.selectList(null);
             for (ProviderRuntimeStats row : list) {
-                ProviderRuntimeState stats = new ProviderRuntimeState(row.getProviderId());
+                ProviderRuntimeState stats = createProviderState(row.getProviderId());
                 stats.setProviderName(row.getProviderName());
                 stats.setSuccessRateEma(row.getSuccessRateEma() != null ? row.getSuccessRateEma() : 1.0);
                 stats.setLatencyEmaMs(row.getLatencyEmaMs() != null ? row.getLatencyEmaMs() : 0);
@@ -34,7 +36,12 @@ public class ProviderStateRegistry {
                 stats.getFailureRequests().set(row.getFailureRequests() != null ? row.getFailureRequests() : 0);
                 stats.setCircuitState(row.getCircuitState() != null ? CircuitState.valueOf(row.getCircuitState()) : CircuitState.CLOSED);
                 stats.setCircuitOpenedAt(row.getCircuitOpenedAt() != null ? row.getCircuitOpenedAt() : 0);
-                
+
+                // 加载阶段1新增字段
+                stats.getConsecutiveFailures().set(row.getConsecutiveFailures() != null ? row.getConsecutiveFailures() : 0);
+                stats.setOpenAttempt(row.getOpenAttempt() != null ? row.getOpenAttempt() : 0);
+                stats.setNextProbeAt(row.getNextProbeAt() != null ? row.getNextProbeAt() : 0);
+
                 stateMap.put(row.getProviderId(), stats);
             }
             log.info("从数据库加载了 {} 条 Provider 运行态数据", list.size());
@@ -47,15 +54,43 @@ public class ProviderStateRegistry {
         }
     }
 
+    /**
+     * 创建带配置的 ProviderRuntimeState
+     */
+    private ProviderRuntimeState createProviderState(String providerId) {
+        return new ProviderRuntimeState(
+                providerId,
+                config.getWindowBucketCount(),
+                config.getWindowBucketDurationMs(),
+                config.getMaxConcurrentRequestsPerProvider()
+        );
+    }
+
     public ProviderRuntimeState get(String providerId) {
         return stateMap.computeIfAbsent(
                 providerId,
-                k -> new ProviderRuntimeState(providerId)
+                this::createProviderState
         );
     }
 
     public Collection<ProviderRuntimeState> all() {
         return stateMap.values();
+    }
+
+    /**
+     * 获取 Provider 状态（不自动创建）
+     * @param providerId Provider ID
+     * @return 状态对象，不存在时返回 null
+     */
+    public ProviderRuntimeState getIfExists(String providerId) {
+        return stateMap.get(providerId);
+    }
+
+    /**
+     * 获取所有 Provider 状态列表
+     */
+    public List<ProviderRuntimeState> getAllProviders() {
+        return new java.util.ArrayList<>(stateMap.values());
     }
 
     public void clear() {

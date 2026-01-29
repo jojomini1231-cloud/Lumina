@@ -1,5 +1,6 @@
 package com.lumina.dto;
 
+import com.lumina.config.OverrideCircuitBreakerConfig;
 import lombok.Data;
 
 import java.util.List;
@@ -18,4 +19,10 @@ public class ModelGroupConfigItem {
     private String apiKey;
 
     private String baseUrl;
+
+    /**
+     * Provider 级别熔断器配置覆盖
+     * 优先级高于 Group 级别配置
+     */
+    private OverrideCircuitBreakerConfig circuitBreakerConfig;
 }

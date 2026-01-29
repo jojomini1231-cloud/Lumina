@@ -1,22 +1,54 @@
 package com.lumina.state;
 
+import com.lumina.config.CircuitBreakerConfig;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.Queue;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
+@RequiredArgsConstructor
 public class ProviderScoreCalculator {
+
+    private final CircuitBreakerConfig config;
 
     private static final double ALPHA = 0.4;
     private static final double LATENCY_SAFE_THRESHOLD_MS = 5000.0;
     private static final double LATENCY_MAX_THRESHOLD_MS = 30000.0;
-    private static final int WINDOW_SIZE = 20;
     private static final int MIN_REQUESTS_FOR_SCORE = 15;  // 最少请求数
 
-    public void update(ProviderRuntimeState stats, boolean success, long latencyMs) {
+    /**
+     * 更新统计数据（带错误类型）
+     * @param stats Provider 运行态
+     * @param failureType 错误类型
+     * @param latencyMs 延迟（毫秒）
+     */
+    public void update(ProviderRuntimeState stats, FailureType failureType, long latencyMs) {
+        boolean success = (failureType == FailureType.SUCCESS);
+        boolean isSlow = latencyMs >= config.getSlowCallThresholdMs();
+        update(stats, success, latencyMs, isSlow);
+    }
 
-        updateBasicStats(stats, success, latencyMs);
+    /**
+     * 更新统计数据（兼容旧接口）
+     * @param stats Provider 运行态
+     * @param success 是否成功
+     * @param latencyMs 延迟（毫秒）
+     */
+    public void update(ProviderRuntimeState stats, boolean success, long latencyMs) {
+        boolean isSlow = latencyMs >= config.getSlowCallThresholdMs();
+        update(stats, success, latencyMs, isSlow);
+    }
+
+    /**
+     * 更新统计数据（完整版本）
+     * @param stats Provider 运行态
+     * @param success 是否成功
+     * @param latencyMs 延迟（毫秒）
+     * @param isSlow 是否为慢调用
+     */
+    private void update(ProviderRuntimeState stats, boolean success, long latencyMs, boolean isSlow) {
+        updateBasicStats(stats, success, latencyMs, isSlow);
 
         // HALF_OPEN 特殊处理
         if (stats.getCircuitState() == CircuitState.HALF_OPEN) {
@@ -32,14 +64,13 @@ public class ProviderScoreCalculator {
             // 试探成功，给予恢复机会
             stats.setScore(60.0);
             stats.setSuccessRateEma(0.8);
-            // 不清空窗口，让它自然恢复
         } else {
             // 试探失败，保持低分
             stats.setScore(5.0);
         }
     }
 
-    private void updateBasicStats(ProviderRuntimeState stats, boolean success, long latencyMs) {
+    private void updateBasicStats(ProviderRuntimeState stats, boolean success, long latencyMs, boolean isSlow) {
         stats.getTotalRequests().incrementAndGet();
 
         if (success) {
@@ -48,7 +79,11 @@ public class ProviderScoreCalculator {
             stats.getFailureRequests().incrementAndGet();
         }
 
-        updateSlidingWindow(stats, success);
+        // 更新高性能滑动窗口（Phase 2）
+        stats.recordToWindow(success, isSlow);
+
+        // 同时更新旧的滑动窗口（兼容性）
+        updateLegacySlidingWindow(stats, success);
 
         // 延迟 EMA
         double oldLatency = stats.getLatencyEmaMs();
@@ -66,16 +101,16 @@ public class ProviderScoreCalculator {
         );
     }
 
-    private void updateSlidingWindow(ProviderRuntimeState stats, boolean success) {
+    @SuppressWarnings("deprecation")
+    private void updateLegacySlidingWindow(ProviderRuntimeState stats, boolean success) {
         Queue<Boolean> window = stats.getRecentResults();
         window.offer(success);
-        if (window.size() > WINDOW_SIZE) {
+        if (window.size() > 20) {
             window.poll();
         }
     }
 
     private void recalcScore(ProviderRuntimeState stats) {
-
         long total = stats.getTotalRequests().get();
 
         // 请求数不足时的策略
@@ -103,16 +138,19 @@ public class ProviderScoreCalculator {
             );
         }
 
-        // 2. 从滑动窗口计算最近失败率
-        Queue<Boolean> window = stats.getRecentResults();
-        long recentFailures = window.stream().filter(r -> !r).count();
-        double recentFailureRate = window.isEmpty() ? 0 : recentFailures * 1.0 / window.size();
+        // 2. 从新的滑动窗口获取错误率（O(1) 操作，替代旧的 stream 遍历）
+        double recentErrorRate = stats.getWindowErrorRate();
 
-        // 3. 最终评分
+        // 3. 慢调用率惩罚（Phase 2 新增）
+        double slowRate = stats.getWindowSlowRate();
+        double slowPenalty = slowRate * 0.5;  // 慢调用率的一半作为惩罚
+
+        // 4. 最终评分
         double score =
                 stats.getSuccessRateEma() * 70
                         - latencyPenalty * 20
-                        - recentFailureRate * 10;
+                        - recentErrorRate * 10
+                        - slowPenalty * 10;
 
         stats.setScore(Math.max(1.0, Math.min(100, score)));
     }

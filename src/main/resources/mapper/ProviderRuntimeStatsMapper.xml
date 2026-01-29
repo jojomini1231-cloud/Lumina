@@ -4,8 +4,20 @@
 
     <!-- upsert - MySQL -->
     <insert id="upsert" databaseId="mysql">
-        INSERT INTO provider_runtime_stats (provider_id, provider_name, success_rate_ema, latency_ema_ms, score, total_requests, success_requests, failure_requests, circuit_state, circuit_opened_at, updated_at)
-        VALUES (#{providerId}, #{providerName}, #{successRateEma}, #{latencyEmaMs}, #{score}, #{totalRequests}, #{successRequests}, #{failureRequests}, #{circuitState}, #{circuitOpenedAt}, #{updatedAt})
+        INSERT INTO provider_runtime_stats (
+            provider_id, provider_name, success_rate_ema, latency_ema_ms, score,
+            total_requests, success_requests, failure_requests,
+            circuit_state, circuit_opened_at,
+            consecutive_failures, open_attempt, next_probe_at,
+            updated_at
+        )
+        VALUES (
+            #{providerId}, #{providerName}, #{successRateEma}, #{latencyEmaMs}, #{score},
+            #{totalRequests}, #{successRequests}, #{failureRequests},
+            #{circuitState}, #{circuitOpenedAt},
+            #{consecutiveFailures}, #{openAttempt}, #{nextProbeAt},
+            #{updatedAt}
+        )
         ON DUPLICATE KEY UPDATE
             provider_name = VALUES(provider_name),
             success_rate_ema = VALUES(success_rate_ema),
@@ -16,13 +28,28 @@
             failure_requests = VALUES(failure_requests),
             circuit_state = VALUES(circuit_state),
             circuit_opened_at = VALUES(circuit_opened_at),
+            consecutive_failures = VALUES(consecutive_failures),
+            open_attempt = VALUES(open_attempt),
+            next_probe_at = VALUES(next_probe_at),
             updated_at = VALUES(updated_at)
     </insert>
 
     <!-- upsert - SQLite -->
     <insert id="upsert" databaseId="sqlite">
-        INSERT OR REPLACE INTO provider_runtime_stats (provider_id, provider_name, success_rate_ema, latency_ema_ms, score, total_requests, success_requests, failure_requests, circuit_state, circuit_opened_at, updated_at)
-        VALUES (#{providerId}, #{providerName}, #{successRateEma}, #{latencyEmaMs}, #{score}, #{totalRequests}, #{successRequests}, #{failureRequests}, #{circuitState}, #{circuitOpenedAt}, #{updatedAt})
+        INSERT OR REPLACE INTO provider_runtime_stats (
+            provider_id, provider_name, success_rate_ema, latency_ema_ms, score,
+            total_requests, success_requests, failure_requests,
+            circuit_state, circuit_opened_at,
+            consecutive_failures, open_attempt, next_probe_at,
+            updated_at
+        )
+        VALUES (
+            #{providerId}, #{providerName}, #{successRateEma}, #{latencyEmaMs}, #{score},
+            #{totalRequests}, #{successRequests}, #{failureRequests},
+            #{circuitState}, #{circuitOpenedAt},
+            #{consecutiveFailures}, #{openAttempt}, #{nextProbeAt},
+            #{updatedAt}
+        )
     </insert>
 
     <!-- deleteByProviderId - 通用 SQL -->

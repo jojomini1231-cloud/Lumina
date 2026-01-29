@@ -61,6 +61,11 @@ public class ProviderStatsPersistenceJob {
                 row.setCircuitState(stats.getCircuitState().name());
                 row.setCircuitOpenedAt(stats.getCircuitOpenedAt());
 
+                // 新增字段：熔断/容错机制优化
+                row.setConsecutiveFailures(stats.getConsecutiveFailures().get());
+                row.setOpenAttempt(stats.getOpenAttempt());
+                row.setNextProbeAt(stats.getNextProbeAt());
+
                 row.setUpdatedAt(LocalDateTime.now());
 
                 mapper.upsert(row);

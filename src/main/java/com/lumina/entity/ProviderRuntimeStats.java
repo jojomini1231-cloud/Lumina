@@ -25,5 +25,10 @@ public class ProviderRuntimeStats {
     private String circuitState;
     private Long circuitOpenedAt;
 
+    // 新增字段：熔断/容错机制优化
+    private Integer consecutiveFailures;
+    private Integer openAttempt;
+    private Long nextProbeAt;
+
     private LocalDateTime updatedAt;
 }
