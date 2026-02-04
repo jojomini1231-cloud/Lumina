@@ -1,13 +1,17 @@
 FROM node:20-alpine AS web-build
 WORKDIR /web
 COPY lumina-web/package.json lumina-web/pnpm-lock.yaml ./
-RUN npm install -g pnpm && pnpm install
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm install -g pnpm && \
+    pnpm config set registry https://registry.npmmirror.com && \
+    pnpm install
 COPY lumina-web/ ./
 RUN pnpm build
 
 FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /app
 COPY pom.xml .
+COPY settings.xml /root/.m2/settings.xml
 COPY src ./src
 COPY --from=web-build /web/dist ./src/main/resources/static
 RUN mvn clean package -DskipTests
