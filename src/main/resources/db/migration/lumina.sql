@@ -3,15 +3,15 @@
 
  Source Server         : mysql
  Source Server Type    : MySQL
- Source Server Version : 80044 (8.0.44-0ubuntu0.24.04.2)
+ Source Server Version : 80045 (8.0.45-0ubuntu0.24.04.1)
  Source Host           : localhost:3306
  Source Schema         : lumina
 
  Target Server Type    : MySQL
- Target Server Version : 80044 (8.0.44-0ubuntu0.24.04.2)
+ Target Server Version : 80045 (8.0.45-0ubuntu0.24.04.1)
  File Encoding         : 65001
 
- Date: 20/01/2026 17:09:49
+ Date: 04/02/2026 15:41:32
 */
 
 SET NAMES utf8mb4;
@@ -34,7 +34,7 @@ CREATE TABLE `api_keys` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_api_key` (`api_key`),
   KEY `idx_enabled` (`is_enabled`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='API密钥表';
+) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='API密钥表';
 
 -- ----------------------------
 -- Table structure for llm_models
@@ -87,7 +87,7 @@ CREATE TABLE `model_group_items` (
   KEY `idx_provider_id` (`provider_id`),
   CONSTRAINT `fk_group_items_group` FOREIGN KEY (`group_id`) REFERENCES `model_groups` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_group_items_provider` FOREIGN KEY (`provider_id`) REFERENCES `providers` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=160 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分组项目表';
+) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分组项目表';
 
 -- ----------------------------
 -- Table structure for model_groups
@@ -103,7 +103,7 @@ CREATE TABLE `model_groups` (
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_name` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分组表';
+) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分组表';
 
 -- ----------------------------
 -- Table structure for provider_runtime_stats
@@ -120,6 +120,9 @@ CREATE TABLE `provider_runtime_stats` (
   `failure_requests` int NOT NULL DEFAULT '0' COMMENT '失败请求数',
   `circuit_state` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'CLOSED' COMMENT '熔断状态',
   `circuit_opened_at` bigint NOT NULL DEFAULT '0' COMMENT '熔断开启时间戳',
+  `consecutive_failures` int DEFAULT NULL,
+  `open_attempt` int DEFAULT NULL,
+  `next_probe_at` bigint DEFAULT NULL,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`provider_id`),
   KEY `idx_score` (`score`),
@@ -147,7 +150,7 @@ CREATE TABLE `providers` (
   UNIQUE KEY `uk_name` (`name`),
   KEY `idx_type` (`type`),
   KEY `idx_enabled` (`is_enabled`)
-) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='供应商表';
+) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='供应商表';
 
 -- ----------------------------
 -- Table structure for request_logs
@@ -210,6 +213,6 @@ CREATE TABLE `users` (
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
+) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
 SET FOREIGN_KEY_CHECKS = 1;
