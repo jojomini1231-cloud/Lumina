@@ -3,7 +3,7 @@ version: '3.8'
 services:
   app:
     build: .
-    image: lumina:0.1.0
+    image: lumina:0.2.9
     container_name: lumina
     ports:
       - "8080:8080"
