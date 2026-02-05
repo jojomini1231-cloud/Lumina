@@ -47,7 +47,8 @@ export interface LogEntry {
   path: string;
   status: string; // Changed from number to string to support "SUCCESS" | "FAIL"
   latency: number;
-  model: string;
+  requestModel: string;
+  actualModel: string;
   tokens: number;
   cost: number;
   providerName: string;

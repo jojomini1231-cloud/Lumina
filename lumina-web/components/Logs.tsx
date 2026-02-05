@@ -220,7 +220,8 @@ export const Logs: React.FC = () => {
                             <tr>
                                 <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('logs.table.status')}</th>
                                 <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('logs.table.time')}</th>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('logs.table.model')}</th>
+                                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('logs.table.requestModel')}</th>
+                                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('logs.table.actualModel')}</th>
                                 <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('logs.table.provider')}</th>
                                 <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('logs.table.latency')}</th>
                                 <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('logs.table.tokens')}</th>
@@ -233,7 +234,7 @@ export const Logs: React.FC = () => {
                         <tbody className="bg-transparent divide-y divide-slate-100 dark:divide-slate-800">
                             {logs.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-16 text-center">
+                                    <td colSpan={9} className="px-6 py-16 text-center">
                                         <div className="flex flex-col items-center justify-center">
                                             <ScrollText className="text-slate-300 dark:text-slate-600 mb-3" size={48} />
                                             <p className="text-slate-500 dark:text-slate-400 text-lg font-medium">No logs found</p>
@@ -257,7 +258,10 @@ export const Logs: React.FC = () => {
                                             {log.timestamp}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-900 dark:text-white">
-                                            {log.model}
+                                            {log.requestModel}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">
+                                            {log.actualModel}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">
                                             {log.providerName}
@@ -400,8 +404,12 @@ export const Logs: React.FC = () => {
                                                 <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{selectedLog.providerName} <span className="text-slate-400 dark:text-slate-500 font-normal ml-1 text-xs">(ID: {selectedLog.providerId})</span></span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{t('logs.table.model')}</span>
+                                                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{t('logs.table.requestModel')}</span>
                                                 <span className="text-xs font-bold text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-1 rounded-md">{selectedLog.requestModelName || 'N/A'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{t('logs.table.actualModel')}</span>
+                                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{selectedLog.actualModelName || '-'}</span>
                                             </div>
                                             <div className="flex justify-between">
                                                 <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{t('logs.detail.type')}</span>

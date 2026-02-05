@@ -5,6 +5,7 @@ export interface LogDTO {
   id: string;
   requestTime: number; // Seconds timestamp
   requestModelName: string;
+  actualModelName?: string;
   inputTokens: number;
   outputTokens: number;
   firstTokenMs: number;
@@ -20,6 +21,7 @@ export interface LogDetail {
   requestTime: number;
   requestType: string;
   requestModelName: string;
+  actualModelName?: string;
   providerId: number;
   providerName: string;
   isStream: boolean;
@@ -58,7 +60,8 @@ export const logService = {
         path: '/v1/chat/completions', // Default
         status: item.status, // Use status directly from API (SUCCESS/FAIL)
         latency: item.firstTokenMs,
-        model: item.requestModelName || 'Unknown',
+        requestModel: item.requestModelName || 'Unknown',
+        actualModel: item.actualModelName || '-',
         tokens: (item.inputTokens || 0) + (item.outputTokens || 0),
         cost: item.cost || 0, // Map cost from API response
         providerName: item.providerName || '-'
