@@ -1,11 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Provider, ProviderType } from '../types';
-import { Plus, MoreHorizontal, Trash2, Key, RefreshCcw, X, Save, Edit2, Activity, DownloadCloud, Loader2, AlertTriangle, Link2, Box, CheckCircle2 } from 'lucide-react';
+import { Plus, MoreHorizontal, Trash2, Key, RefreshCcw, X, Save, Edit2, Activity, DownloadCloud, Loader2, Link2, Box } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
 import { providerService } from '../services/providerService';
 import { CardGridSkeleton } from './Skeletons';
 import { SlideInItem } from './Animations';
 import { Pagination } from './Pagination';
+import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { Modal } from './ui/Modal';
+import { EmptyState } from './ui/EmptyState';
+import { useToast } from './ui/ToastContext';
 
 const StatusSwitch = ({ checked, onChange, disabled = false, label }: { checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean, label?: string }) => (
   <div className="flex items-center cursor-pointer group" onClick={(e) => {
@@ -43,6 +48,8 @@ export const getProviderLabel = (type: ProviderType): string => {
 };
 
 export const Providers: React.FC = () => {
+  const { showToast } = useToast();
+
   const [providers, setProviders] = useState<Provider[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -59,7 +66,6 @@ export const Providers: React.FC = () => {
   });
   
   // UI States for Custom Modals & Toasts
-  const [toast, setToast] = useState<{show: boolean, message: string, type: 'success' | 'error' | 'info'}>({ show: false, message: '', type: 'success' });
   const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, id: string | null, name: string}>({ isOpen: false, id: null, name: '' });
 
   // Form State
@@ -79,11 +85,6 @@ export const Providers: React.FC = () => {
   const modelsInputRef = useRef<HTMLInputElement>(null);
 
   const { t } = useLanguage();
-
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ show: true, message, type });
-    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
-  };
 
   const fetchProviders = async (page = pagination.current, size = pagination.size) => {
     setIsLoading(true);
@@ -343,61 +344,40 @@ export const Providers: React.FC = () => {
 
   return (
     <div className="space-y-6 relative flex flex-col h-full">
-      {/* Toast Notification */}
-      {toast.show && (
-          <div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-xl shadow-float border flex items-center animate-in slide-in-from-right duration-300 backdrop-blur-md ${
-              toast.type === 'success' ? 'bg-white border-green-200 text-green-700 dark:bg-[#1a1a1a] dark:border-green-900 dark:text-green-400' : 
-              toast.type === 'error' ? 'bg-white border-red-200 text-red-700 dark:bg-[#1a1a1a] dark:border-red-900 dark:text-red-400' :
-              'bg-white border-blue-200 text-blue-700 dark:bg-[#1a1a1a] dark:border-blue-900 dark:text-blue-400'
-          }`}>
-              {toast.type === 'success' ? <CheckCircle2 size={18} className="mr-2" /> : 
-               toast.type === 'error' ? <AlertTriangle size={18} className="mr-2" /> :
-               <Activity size={18} className="mr-2" />}
-              <span className="text-sm font-medium">{toast.message}</span>
-          </div>
-      )}
-
       {/* Delete Confirmation Modal */}
-      {deleteModal.isOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-float max-w-sm w-full p-6 animate-in zoom-in-95 duration-200 border border-gray-100 dark:border-gray-800">
-                <div className="flex items-center justify-center w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full mx-auto mb-4 text-red-600 dark:text-red-400">
-                    <Trash2 size={24} />
-                </div>
-                <h3 className="text-lg font-bold text-center text-gray-900 dark:text-white mb-2">{t('providers.deleteTitle')}</h3>
-                <p className="text-center text-gray-500 dark:text-gray-400 text-sm mb-6 leading-relaxed">
-                    {t('providers.deleteDesc', { name: deleteModal.name })}
-                </p>
-                <div className="flex space-x-3">
-                    <button 
-                        onClick={() => setDeleteModal({isOpen: false, id: null, name: ''})}
-                        className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                    >
-                        {t('common.cancel')}
-                    </button>
-                    <button 
-                        onClick={confirmDelete}
-                        className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl shadow-sm transition-colors"
-                    >
-                        {t('common.delete')}
-                    </button>
-                </div>
+      <Modal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({isOpen: false, id: null, name: ''})}
+        hideHeader
+        size="sm"
+      >
+        <div className="flex flex-col items-center">
+            <div className="flex items-center justify-center w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full mx-auto mb-4 text-red-600 dark:text-red-400">
+                <Trash2 size={24} />
+            </div>
+            <h3 className="text-lg font-bold text-center text-gray-900 dark:text-white mb-2">{t('providers.deleteTitle')}</h3>
+            <p className="text-center text-gray-500 dark:text-gray-400 text-sm mb-6 leading-relaxed">
+                {t('providers.deleteDesc', { name: '' })} <span className="font-bold text-gray-900 dark:text-white">{deleteModal.name}</span>?
+            </p>
+            <div className="flex space-x-3 w-full">
+                <Button onClick={() => setDeleteModal({isOpen: false, id: null, name: ''})} variant="secondary" className="flex-1">
+                    {t('common.cancel')}
+                </Button>
+                <Button onClick={confirmDelete} variant="danger" className="flex-1">
+                    {t('common.delete')}
+                </Button>
             </div>
         </div>
-      )}
+      </Modal>
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">{t('providers.title')}</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg">{t('providers.subtitle')}</p>
         </div>
-        <button 
-            onClick={handleOpenAdd}
-            className="group flex items-center px-5 py-2.5 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-gray-100 text-white dark:text-black rounded-xl font-semibold shadow-sm transition-all hover:-translate-y-0.5"
-        >
-          <Plus size={18} className="mr-2" />
+        <Button onClick={handleOpenAdd} variant="primary" leftIcon={<Plus size={18} />}>
           {t('providers.addProvider')}
-        </button>
+        </Button>
       </div>
 
       <div className="flex-1 flex flex-col min-h-0">
@@ -407,11 +387,15 @@ export const Providers: React.FC = () => {
             <>
             <div className="grid grid-cols-1 gap-4">
                 {providers.length === 0 ? (
-                    <div className="text-center py-20 bg-white dark:bg-[#1a1a1a] rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 animate-fade-in">
-                        <Box size={48} className="mx-auto text-gray-300 mb-4" />
-                        <p className="text-lg text-gray-500 dark:text-gray-400 font-medium">{t('providers.noProviders')}</p>
-                        <p className="text-sm text-gray-400 mt-1">{t('providers.addFirst')}</p>
-                    </div>
+                    <EmptyState 
+                        icon={<Box size={48} />}
+                        title={t('providers.noProviders')}
+                        description={t('providers.addFirst')}
+                        actionLabel={t('providers.addProvider')}
+                        onAction={handleOpenAdd}
+                        actionIcon={<Plus size={18} />}
+                        className="bg-white dark:bg-[#1a1a1a] rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 animate-fade-in"
+                    />
                 ) : (
                     providers.map((provider, index) => (
                     <SlideInItem key={provider.id} index={index}>
@@ -427,6 +411,9 @@ export const Providers: React.FC = () => {
                                 <div className="flex-1 min-w-0">
                                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2">
                                         <h3 className="font-bold text-gray-900 dark:text-white text-lg truncate">{provider.name}</h3>
+                                        <Badge tone="neutral" size="xs">
+                                          {getProviderLabel(provider.type)}
+                                        </Badge>
                                         <div className="flex items-center space-x-3 pl-3 border-l border-gray-200 dark:border-gray-700 shrink-0">
                                             <StatusSwitch 
                                                 checked={provider.status === 'active'}
@@ -466,43 +453,50 @@ export const Providers: React.FC = () => {
 
                             {/* Right Section: Actions */}
                             <div className="flex items-center gap-2 w-full md:w-auto mt-2 md:mt-0 pt-4 md:pt-0 border-t md:border-t-0 border-gray-100 dark:border-gray-800">
-                                <button 
+                                <Button
                                     onClick={() => handleOpenEdit(provider)}
-                                    className="flex-1 md:flex-none flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
+                                    variant="secondary"
+                                    className="flex-1 md:flex-none"
+                                    leftIcon={<Edit2 size={16} className="md:hidden" />}
                                 >
-                                    <Edit2 size={16} className="mr-2 md:hidden" />
                                     {t('common.edit')}
-                                </button>
-                                <button 
+                                </Button>
+                                <Button
                                     onClick={(e) => handleDeleteClick(provider.id, provider.name, e)}
-                                    className="flex-1 md:flex-none flex items-center justify-center p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 border border-gray-200 dark:border-gray-700 md:border-transparent rounded-xl transition-colors"
-                                    title="Delete"
+                                    variant="ghost"
+                                    className="flex-1 md:flex-none text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 border border-gray-200 dark:border-gray-700 md:border-transparent"
+                                    title={t('common.delete')}
                                 >
                                     <Trash2 size={18} />
-                                </button>
+                                </Button>
                                 <div className="relative flex-1 md:flex-none">
-                                    <button 
+                                    <Button
                                         onClick={() => setActiveMenuId(activeMenuId === provider.id ? null : provider.id)}
-                                        className={`w-full md:w-auto flex items-center justify-center p-2 rounded-xl transition-colors border border-gray-200 dark:border-gray-700 md:border-transparent ${activeMenuId === provider.id ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                                        variant="ghost"
+                                        className={activeMenuId === provider.id ? 'w-full md:w-auto border border-gray-200 dark:border-gray-700 md:border-transparent bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white px-2' : 'w-full md:w-auto border border-gray-200 dark:border-gray-700 md:border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 px-2'}
                                     >
                                         <MoreHorizontal size={18} />
-                                    </button>
+                                    </Button>
                                     {activeMenuId === provider.id && (
                                         <div ref={menuRef} className="absolute right-0 bottom-full md:bottom-auto md:top-full mb-2 md:mb-0 md:mt-2 w-48 bg-white dark:bg-[#1a1a1a] rounded-xl shadow-float border border-gray-200 dark:border-gray-800 z-10 py-1 animate-in fade-in zoom-in-95 duration-100">
-                                            <button 
+                                            <Button
                                                 onClick={() => handleTestConnection(provider.id)}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center transition-colors"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="w-full justify-start px-4 rounded-none"
+                                                leftIcon={<Activity size={14} className="text-gray-400" />}
                                             >
-                                                <Activity size={14} className="mr-2 text-gray-400" />
                                                 {t('providers.more.testConnection')}
-                                            </button>
-                                            <button 
+                                            </Button>
+                                            <Button
                                                 onClick={() => handleSyncModels(provider.id)}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center transition-colors"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="w-full justify-start px-4 rounded-none"
+                                                leftIcon={<DownloadCloud size={14} className="text-gray-400" />}
                                             >
-                                                <DownloadCloud size={14} className="mr-2 text-gray-400" />
                                                 {t('providers.more.syncModels')}
-                                            </button>
+                                            </Button>
                                         </div>
                                     )}
                                 </div>
@@ -527,176 +521,165 @@ export const Providers: React.FC = () => {
       </div>
 
       {/* Add/Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-float max-w-lg w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 border border-gray-100 dark:border-gray-800">
-                <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center sticky top-0 bg-white/95 dark:bg-[#1a1a1a]/95 backdrop-blur z-10 rounded-t-2xl">
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                        {editingProvider ? t('providers.modal.titleEdit') : t('providers.modal.titleAdd')}
-                    </h2>
-                    <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
-                        <X size={20} />
-                    </button>
-                </div>
-                <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                    
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
-                            {t('providers.modal.name')} <span className="text-red-500">*</span>
-                        </label>
-                        <input 
-                            type="text" 
-                            required
-                            value={formData.name}
-                            onChange={(e) => setFormData({...formData, name: e.target.value})}
-                            className="block w-full rounded-xl border-gray-200 dark:border-gray-700 shadow-sm focus:border-black dark:focus:border-white focus:ring-black dark:focus:ring-white text-sm py-2.5 px-3 bg-gray-50 dark:bg-gray-900 dark:text-white transition-all"
-                        />
-                    </div>
-                    
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
-                            {t('providers.modal.type')} <span className="text-red-500">*</span>
-                        </label>
-                        <select 
-                            value={formData.type}
-                            onChange={(e) => setFormData({...formData, type: parseInt(e.target.value) as ProviderType})}
-                            className="block w-full rounded-xl border-gray-200 dark:border-gray-700 shadow-sm focus:border-black dark:focus:border-white focus:ring-black dark:focus:ring-white text-sm py-2.5 px-3 bg-gray-50 dark:bg-gray-900 dark:text-white cursor-pointer"
-                        >
-                            {Object.values(ProviderType)
-                                .filter(value => typeof value === 'number')
-                                .map((value) => (
-                                <option key={value} value={value}>{getProviderLabel(value as ProviderType)}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
-                            {t('providers.modal.baseUrl')} <span className="text-red-500">*</span>
-                        </label>
-                        <input 
-                            type="url" 
-                            required
-                            value={formData.baseUrl}
-                            onChange={(e) => setFormData({...formData, baseUrl: e.target.value})}
-                            className="block w-full rounded-xl border-gray-200 dark:border-gray-700 shadow-sm focus:border-black dark:focus:border-white focus:ring-black dark:focus:ring-white text-sm py-2.5 px-3 font-mono bg-gray-50 dark:bg-gray-900 dark:text-white transition-all"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
-                            {t('providers.modal.apiKey')} <span className="text-red-500">*</span>
-                        </label>
-                        <input 
-                            type="text"
-                            required
-                            value={formData.apiKey}
-                            onChange={(e) => setFormData({...formData, apiKey: e.target.value})}
-                            placeholder={t('providers.modal.apiKeyPlaceholder')}
-                            className="block w-full rounded-xl border-gray-200 dark:border-gray-700 shadow-sm focus:border-black dark:focus:border-white focus:ring-black dark:focus:ring-white text-sm py-2.5 px-3 font-mono bg-gray-50 dark:bg-gray-900 dark:text-white dark:placeholder-gray-600 transition-all"
-                        />
-                    </div>
-
-                    <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
-                        <div className="flex justify-between items-center mb-3">
-                            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                                {t('providers.modal.models')} <span className="text-red-500">*</span>
-                            </label>
-                            <div className="flex items-center gap-3">
-                                {formData.models && formData.models.length > 0 && (
-                                    <button 
-                                        type="button" 
-                                        onClick={handleClearModels}
-                                        className="text-[10px] font-medium text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors flex items-center"
-                                    >
-                                        <Trash2 size={10} className="mr-1" />
-                                        Clear
-                                    </button>
-                                )}
-                                <button 
-                                    type="button" 
-                                    onClick={handleSyncModelsFromForm}
-                                    disabled={isSyncing}
-                                    className={`text-[10px] flex items-center font-bold px-2 py-1 rounded-lg transition-colors ${isSyncing ? 'text-gray-400 cursor-not-allowed' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-                                >
-                                    {isSyncing ? <Loader2 size={10} className="mr-1 animate-spin" /> : <RefreshCcw size={10} className="mr-1" />}
-                                    Auto-Sync
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div 
-                            className="border border-gray-200 dark:border-gray-700 rounded-xl p-3 bg-white dark:bg-[#1a1a1a] focus-within:ring-1 focus-within:ring-black dark:focus-within:ring-white transition-all h-32 overflow-y-auto cursor-text custom-scrollbar"
-                            onClick={() => modelsInputRef.current?.focus()}
-                        >
-                            <div className="flex flex-wrap gap-2">
-                                {formData.models?.map((model, index) => (
-                                    <span key={index} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 animate-in zoom-in-95 duration-100">
-                                        {model}
-                                        <button
-                                            type="button"
-                                            onClick={(e) => { e.stopPropagation(); removeModel(index); }}
-                                            className="ml-1.5 text-gray-400 hover:text-red-500 focus:outline-none"
-                                        >
-                                            <X size={12} />
-                                        </button>
-                                    </span>
-                                ))}
-                                <input
-                                    ref={modelsInputRef}
-                                    type="text"
-                                    value={modelsInput}
-                                    onChange={(e) => setModelsInput(e.target.value)}
-                                    onKeyDown={handleKeyDown}
-                                    onBlur={() => {
-                                        if(modelsInput.trim()) addModel(modelsInput);
-                                    }}
-                                    placeholder={formData.models?.length === 0 ? "Type model & Enter..." : ''}
-                                    className="flex-1 min-w-[120px] outline-none text-sm font-mono bg-transparent py-0.5 text-gray-700 dark:text-gray-200 placeholder:font-sans dark:placeholder-gray-500"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-200 dark:border-gray-800">
-                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">{t('providers.modal.status')}</label>
-                            <StatusSwitch 
-                                checked={formData.status === 'active'}
-                                onChange={(checked) => setFormData({...formData, status: checked ? 'active' : 'inactive'})}
-                                label={formData.status === 'active' ? t('common.active') : t('common.inactive')}
-                            />
-                        </div>
-                         <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-200 dark:border-gray-800">
-                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">{t('providers.modal.autoSync')}</label>
-                            <StatusSwitch 
-                                checked={formData.autoSync !== false}
-                                onChange={(checked) => setFormData({...formData, autoSync: checked})}
-                                label={formData.autoSync !== false ? t('common.enabled') : t('common.disabled')}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="pt-4 flex justify-end space-x-3 border-t border-gray-100 dark:border-gray-800">
-                        <button 
-                            type="button"
-                            onClick={() => setIsModalOpen(false)}
-                            className="px-4 py-2.5 border border-gray-200 dark:border-gray-700 text-sm font-medium rounded-xl text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                        >
-                            {t('common.cancel')}
-                        </button>
-                        <button 
-                            type="submit"
-                            className="flex items-center px-4 py-2.5 text-sm font-medium rounded-xl shadow-sm text-white bg-gray-900 hover:bg-black dark:bg-white dark:text-black dark:hover:bg-gray-200 transition-all hover:-translate-y-0.5"
-                        >
-                            <Save size={18} className="mr-2" />
-                            {t('common.save')}
-                        </button>
-                    </div>
-                </form>
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editingProvider ? t('providers.modal.titleEdit') : t('providers.modal.titleAdd')}
+        size="lg"
+      >
+        <form id="provider-form" onSubmit={handleSubmit} className="space-y-5">
+            
+            <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
+                    {t('providers.modal.name')} <span className="text-red-500">*</span>
+                </label>
+                <input 
+                    type="text" 
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    className="block w-full rounded-xl border-gray-200 dark:border-gray-700 shadow-sm focus:border-black dark:focus:border-white focus:ring-black dark:focus:ring-white text-sm py-2.5 px-3 bg-gray-50 dark:bg-gray-900 dark:text-white transition-all"
+                />
             </div>
-        </div>
-      )}
+            
+            <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
+                    {t('providers.modal.type')} <span className="text-red-500">*</span>
+                </label>
+                <select 
+                    value={formData.type}
+                    onChange={(e) => setFormData({...formData, type: parseInt(e.target.value) as ProviderType})}
+                    className="block w-full rounded-xl border-gray-200 dark:border-gray-700 shadow-sm focus:border-black dark:focus:border-white focus:ring-black dark:focus:ring-white text-sm py-2.5 px-3 bg-gray-50 dark:bg-gray-900 dark:text-white cursor-pointer"
+                >
+                    {Object.values(ProviderType)
+                        .filter(value => typeof value === 'number')
+                        .map((value) => (
+                        <option key={value} value={value}>{getProviderLabel(value as ProviderType)}</option>
+                    ))}
+                </select>
+            </div>
+
+            <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
+                    {t('providers.modal.baseUrl')} <span className="text-red-500">*</span>
+                </label>
+                <input 
+                    type="url" 
+                    required
+                    value={formData.baseUrl}
+                    onChange={(e) => setFormData({...formData, baseUrl: e.target.value})}
+                    className="block w-full rounded-xl border-gray-200 dark:border-gray-700 shadow-sm focus:border-black dark:focus:border-white focus:ring-black dark:focus:ring-white text-sm py-2.5 px-3 font-mono bg-gray-50 dark:bg-gray-900 dark:text-white transition-all"
+                />
+            </div>
+
+            <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
+                    {t('providers.modal.apiKey')} <span className="text-red-500">*</span>
+                </label>
+                <input 
+                    type="text"
+                    required
+                    value={formData.apiKey}
+                    onChange={(e) => setFormData({...formData, apiKey: e.target.value})}
+                    placeholder={t('providers.modal.apiKeyPlaceholder')}
+                    className="block w-full rounded-xl border-gray-200 dark:border-gray-700 shadow-sm focus:border-black dark:focus:border-white focus:ring-black dark:focus:ring-white text-sm py-2.5 px-3 font-mono bg-gray-50 dark:bg-gray-900 dark:text-white dark:placeholder-gray-600 transition-all"
+                />
+            </div>
+
+            <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
+                <div className="flex justify-between items-center mb-3">
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                        {t('providers.modal.models')} <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex items-center gap-3">
+                        {formData.models && formData.models.length > 0 && (
+                            <Button
+                                type="button"
+                                onClick={handleClearModels}
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400"
+                                leftIcon={<Trash2 size={10} />}
+                            >
+                                Clear
+                            </Button>
+                        )}
+                        <Button
+                            type="button"
+                            onClick={handleSyncModelsFromForm}
+                            disabled={isSyncing}
+                            variant="secondary"
+                            size="sm"
+                            className="h-6 px-2 text-[10px]"
+                            leftIcon={isSyncing ? <Loader2 size={10} className="animate-spin" /> : <RefreshCcw size={10} />}
+                        >
+                            Auto-Sync
+                        </Button>
+                    </div>
+                </div>
+                
+                <div 
+                    className="border border-gray-200 dark:border-gray-700 rounded-xl p-3 bg-white dark:bg-[#1a1a1a] focus-within:ring-1 focus-within:ring-black dark:focus-within:ring-white transition-all h-32 overflow-y-auto cursor-text custom-scrollbar"
+                    onClick={() => modelsInputRef.current?.focus()}
+                >
+                    <div className="flex flex-wrap gap-2">
+                        {formData.models?.map((model, index) => (
+                            <span key={index} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 animate-in zoom-in-95 duration-100">
+                                {model}
+                                <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); removeModel(index); }}
+                                    className="ml-1.5 text-gray-400 hover:text-red-500 focus:outline-none"
+                                >
+                                    <X size={12} />
+                                </button>
+                            </span>
+                        ))}
+                        <input
+                            ref={modelsInputRef}
+                            type="text"
+                            value={modelsInput}
+                            onChange={(e) => setModelsInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            onBlur={() => {
+                                if(modelsInput.trim()) addModel(modelsInput);
+                            }}
+                            placeholder={formData.models?.length === 0 ? "Type model & Enter..." : ''}
+                            className="flex-1 min-w-[120px] outline-none text-sm font-mono bg-transparent py-0.5 text-gray-700 dark:text-gray-200 placeholder:font-sans dark:placeholder-gray-500"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-200 dark:border-gray-800">
+                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">{t('providers.modal.status')}</label>
+                    <StatusSwitch 
+                        checked={formData.status === 'active'}
+                        onChange={(checked) => setFormData({...formData, status: checked ? 'active' : 'inactive'})}
+                        label={formData.status === 'active' ? t('common.active') : t('common.inactive')}
+                    />
+                </div>
+                    <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-200 dark:border-gray-800">
+                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">{t('providers.modal.autoSync')}</label>
+                    <StatusSwitch 
+                        checked={formData.autoSync !== false}
+                        onChange={(checked) => setFormData({...formData, autoSync: checked})}
+                        label={formData.autoSync !== false ? t('common.enabled') : t('common.disabled')}
+                    />
+                </div>
+            </div>
+
+            <div className="pt-4 flex justify-end space-x-3 border-t border-gray-100 dark:border-gray-800 -mx-6 -mb-6 px-6 py-4 bg-white/95 dark:bg-[#1a1a1a]/95 backdrop-blur rounded-b-2xl mt-4">
+                <Button type="button" onClick={() => setIsModalOpen(false)} variant="secondary">
+                    {t('common.cancel')}
+                </Button>
+                <Button type="submit" variant="primary" leftIcon={<Save size={18} />}>
+                    {t('common.save')}
+                </Button>
+            </div>
+        </form>
+      </Modal>
     </div>
   );
 };

@@ -54,8 +54,16 @@ export interface LogPageResponse {
 
 export const logService = {
   // Fetch paginated list of logs
-  async getPage(current = 1, size = 10): Promise<LogPageResponse> {
-    const response = await api.get<any>('/request-logs/page', { params: { current, size } });
+  async getPage(current = 1, size = 10, filters?: { status?: string; search?: string }): Promise<LogPageResponse> {
+    const params: any = { current, size };
+    if (filters?.status && filters.status !== 'ALL') {
+      params.status = filters.status;
+    }
+    if (filters?.search) {
+      params.requestId = filters.search; // Assuming backend searches by requestId
+    }
+
+    const response = await api.get<any>('/request-logs/page', { params });
     
     if (response.code === 200 && response.data && Array.isArray(response.data.records)) {
       const records = response.data.records.map((item: LogDTO) => ({

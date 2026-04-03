@@ -5,10 +5,11 @@ import { CircuitBreakerRecentEvent, CircuitBreakerStatus, CircuitState } from '.
 import { useLanguage } from './LanguageContext';
 import { useAuth } from './AuthContext';
 import { Pagination } from './Pagination';
+import { Button } from './ui/Button';
+import { Badge } from './ui/Badge';
+import { useToast } from './ui/ToastContext';
 
-interface CircuitBreakerSettingsPanelProps {
-  showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
-}
+interface CircuitBreakerSettingsPanelProps {}
 
 const formatTimestamp = (timestamp?: number) => {
   if (!timestamp) {
@@ -24,16 +25,16 @@ const formatIsoTimestamp = (value?: string) => {
   return new Date(value).toLocaleString();
 };
 
-const getStateClassName = (state: CircuitState) => {
+const getStateTone = (state: CircuitState) => {
   switch (state) {
     case 'CLOSED':
-      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800';
+      return 'success' as const;
     case 'OPEN':
-      return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800';
+      return 'danger' as const;
     case 'HALF_OPEN':
-      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800';
+      return 'warning' as const;
     default:
-      return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 border-gray-200 dark:border-gray-700';
+      return 'neutral' as const;
   }
 };
 
@@ -54,9 +55,10 @@ const formatThresholdSummary = (cb: CircuitBreakerStatus, t: (key: string) => st
   return `minCalls ${config.minCalls} · err ${(config.errorRateThreshold * 100).toFixed(0)}% · slow ${(config.slowRateThreshold * 100).toFixed(0)}% · bulkhead ${config.maxConcurrentRequestsPerProvider}`;
 };
 
-export const CircuitBreakerSettingsPanel: React.FC<CircuitBreakerSettingsPanelProps> = ({ showToast }) => {
+export const CircuitBreakerSettingsPanel: React.FC<CircuitBreakerSettingsPanelProps> = ({}) => {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [circuitBreakers, setCircuitBreakers] = useState<CircuitBreakerStatus[]>([]);
   const [recentEvents, setRecentEvents] = useState<CircuitBreakerRecentEvent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -338,18 +340,20 @@ export const CircuitBreakerSettingsPanel: React.FC<CircuitBreakerSettingsPanelPr
                                   <div>
                                     <div>{cb.providerName}</div>
                                     {cb.manuallyControlled && (
-                                      <span className="mt-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200 dark:border-purple-800">
-                                        MANUAL
-                                      </span>
+                                      <div className="mt-1">
+                                        <Badge tone="purple" size="xs">
+                                          MANUAL
+                                        </Badge>
+                                      </div>
                                     )}
                                   </div>
                                 </div>
                               </td>
                               <td className="px-5 py-3.5 text-sm text-gray-600 dark:text-gray-300">{cb.modelName || '-'}</td>
                               <td className="px-5 py-3.5">
-                                <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full border ${getStateClassName(cb.circuitState)}`}>
+                                <Badge tone={getStateTone(cb.circuitState)} size="sm">
                                   {t(`settings.circuitBreaker.states.${cb.circuitState}`)}
-                                </span>
+                                </Badge>
                               </td>
                               <td className="px-5 py-3.5 text-xs text-gray-500 dark:text-gray-400 hidden lg:table-cell">{formatTimestamp(cb.stateSinceAt)}</td>
                               <td className="px-5 py-3.5 text-xs text-gray-500 dark:text-gray-400 hidden xl:table-cell">{formatTimestamp(cb.nextProbeAt)}</td>
@@ -365,19 +369,22 @@ export const CircuitBreakerSettingsPanel: React.FC<CircuitBreakerSettingsPanelPr
                               </td>
                               <td className="px-5 py-3.5 text-right text-sm font-medium">
                                 {cb.manuallyControlled ? (
-                                  <button
+                                  <Button
                                     onClick={() => handleReleaseControl(cb.providerId)}
-                                    className="px-3 py-1 bg-orange-50 text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-100 text-xs font-semibold transition-colors dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800 dark:hover:bg-orange-900/30"
+                                    variant="secondary"
+                                    size="sm"
+                                    className="text-orange-600 dark:text-orange-400"
                                   >
                                     {t('settings.circuitBreaker.actions.release')}
-                                  </button>
+                                  </Button>
                                 ) : (
-                                  <button
+                                  <Button
                                     onClick={() => openControlModal(cb)}
-                                    className="px-3 py-1 bg-white text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 text-xs font-semibold transition-colors dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
+                                    variant="secondary"
+                                    size="sm"
                                   >
                                     {t('settings.circuitBreaker.actions.manage')}
-                                  </button>
+                                  </Button>
                                 )}
                               </td>
                             </tr>

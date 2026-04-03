@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Download, Loader2, ChevronLeft, ChevronRight, X, Copy, Check, Eye, RefreshCw, Clock, ScrollText } from 'lucide-react';
+import { Search, Filter, Download, Loader2, ChevronLeft, ChevronRight, Copy, Check, Eye, RefreshCw, ScrollText } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
 import { logService, LogDetailMeta, LogDetailPayloads } from '../services/logService';
 import { LogEntry } from '../types';
 import { TableSkeleton } from './Skeletons';
+import { Badge } from './ui/Badge';
+import { Modal } from './ui/Modal';
+import { Button } from './ui/Button';
 
 export const Logs: React.FC = () => {
   const { t } = useLanguage();
@@ -28,6 +31,18 @@ export const Logs: React.FC = () => {
     const parsed = saved ? parseInt(saved, 10) : 30000;
     return isNaN(parsed) ? 30000 : parsed;
   });
+  const [isRefreshingLogs, setIsRefreshingLogs] = useState(false);
+
+  // Search & Filter State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Modal State
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -42,8 +57,9 @@ export const Logs: React.FC = () => {
   // Added isBackground parameter to avoid full loading spinner during auto-refresh
   const fetchLogs = async (page: number, size: number, isBackground = false) => {
     if (!isBackground) setIsLoading(true);
+    else setIsRefreshingLogs(true);
     try {
-      const data = await logService.getPage(page, size);
+      const data = await logService.getPage(page, size, { status: statusFilter, search: debouncedSearch });
       setLogs(data.records);
       setPagination({
         current: data.current,
@@ -55,12 +71,13 @@ export const Logs: React.FC = () => {
       console.error("Failed to fetch logs:", error);
     } finally {
       if (!isBackground) setIsLoading(false);
+      else setIsRefreshingLogs(false);
     }
   };
 
   useEffect(() => {
     fetchLogs(pagination.current, pagination.size);
-  }, []); // Initial load
+  }, [debouncedSearch, statusFilter]); // Refetch when search or filter changes
 
   // Persist Auto Refresh State
   useEffect(() => {
@@ -212,19 +229,25 @@ export const Logs: React.FC = () => {
             <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg">{t('logs.subtitle')}</p>
             </div>
             <div className="flex space-x-3">
-                <button
+                <Button
                     onClick={handleRefreshClick}
-                    className="flex items-center justify-center w-10 h-10 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-black dark:hover:text-white shadow-sm transition-all active:scale-95"
+                    variant="secondary"
+                    className="w-10 px-0"
                     title="Refresh"
                 >
                     <RefreshCw size={18} className={`${isLoading ? 'animate-spin' : ''}`} />
-                </button>
+                </Button>
                 <div className="flex items-center bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm overflow-hidden">
                     <button
                         onClick={() => setIsAutoRefresh(!isAutoRefresh)}
                         className={`flex items-center px-4 py-2 text-sm font-semibold transition-colors h-10 ${isAutoRefresh ? 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                     >
-                        <Clock size={16} className="mr-2" />
+                        <div className="relative flex h-2 w-2 mr-2">
+                          {isRefreshingLogs && (
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                          )}
+                          <span className={`relative inline-flex rounded-full h-2 w-2 ${isAutoRefresh ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+                        </div>
                         {t('logs.autoRefresh')}
                     </button>
                     {isAutoRefresh && (
@@ -242,10 +265,9 @@ export const Logs: React.FC = () => {
                         </div>
                     )}
                 </div>
-                <button className="flex items-center px-4 py-2 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 shadow-sm transition-all">
-                    <Download size={18} className="mr-2" />
+                <Button variant="secondary" leftIcon={<Download size={18} />}>
                     {t('common.export')}
-                </button>
+                </Button>
             </div>
         </div>
 
@@ -257,15 +279,30 @@ export const Logs: React.FC = () => {
                 </div>
                 <input
                     type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     className="block w-full pl-11 pr-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl leading-5 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white focus:border-transparent transition-all sm:text-sm"
                     placeholder={t('logs.searchPlaceholder')}
                 />
             </div>
             <div className="flex gap-3">
-                <button className="flex items-center px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                    <Filter size={16} className="mr-2" />
-                    {t('common.filter')}
-                </button>
+                <div className="relative flex items-center">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Filter size={16} className="text-gray-400" />
+                    </div>
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => {
+                            setStatusFilter(e.target.value);
+                            setPagination(prev => ({ ...prev, current: 1 }));
+                        }}
+                        className="block w-40 pl-9 pr-10 py-2.5 text-sm font-medium border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white focus:border-transparent rounded-xl border bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-white cursor-pointer appearance-none"
+                    >
+                        <option value="ALL">{t('common.all')}</option>
+                        <option value="SUCCESS">{t('common.success')}</option>
+                        <option value="FAIL">{t('common.fail')}</option>
+                    </select>
+                </div>
                 <select
                     value={pagination.size}
                     onChange={handleSizeChange}
@@ -319,13 +356,9 @@ export const Logs: React.FC = () => {
                                 logs.map((log) => (
                                     <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors animate-fade-in group">
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`px-2.5 py-0.5 inline-flex text-[10px] font-bold uppercase tracking-wide rounded-full border ${
-                                                log.status === 'SUCCESS'
-                                                ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
-                                                : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'
-                                            }`}>
-                                                {log.status === 'SUCCESS' ? t('common.success') : t('common.fail')}
-                                            </span>
+                                            <Badge tone={log.status === 'SUCCESS' ? 'success' : 'danger'} size="xs">
+                                              {log.status === 'SUCCESS' ? t('common.success') : t('common.fail')}
+                                            </Badge>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400 font-mono">
                                             {log.timestamp}
@@ -351,13 +384,14 @@ export const Logs: React.FC = () => {
                                             {log.cost > 0 ? `$${log.cost.toFixed(5)}` : '-'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <button
+                                            <Button
                                                 onClick={() => handleViewLog(log.id)}
-                                                className="text-gray-400 hover:text-black dark:hover:text-white transition-colors opacity-0 group-hover:opacity-100 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                                                variant="ghost"
+                                                className="opacity-0 group-hover:opacity-100 px-2"
                                                 title={t('common.view')}
                                             >
                                                 <Eye size={18} />
-                                            </button>
+                                            </Button>
                                         </td>
                                     </tr>
                                 ))
@@ -420,164 +454,152 @@ export const Logs: React.FC = () => {
         </div>
 
         {/* Detail Modal */}
-        {isDetailOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4 animate-fade-in">
-                <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-float max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100 dark:border-gray-800">
-                    <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-white/95 dark:bg-[#1a1a1a]/95 backdrop-blur z-10">
-                        <div className="flex items-center gap-3">
-                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t('logs.detail.title')}</h2>
-                            {selectedLog && (
-                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide border ${
-                                    selectedLog.status === 'SUCCESS'
-                                    ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
-                                    : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'
-                                }`}>
-                                    {selectedLog.status}
-                                </span>
-                            )}
-                        </div>
-                        <button onClick={() => setIsDetailOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-full p-1 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                            <X size={24} />
-                        </button>
+        <Modal
+            isOpen={isDetailOpen}
+            onClose={() => setIsDetailOpen(false)}
+            size="xl"
+            title={
+                <div className="flex items-center gap-3">
+                    <span className="text-xl">{t('logs.detail.title')}</span>
+                    {selectedLog && (
+                        <Badge tone={selectedLog.status === 'SUCCESS' ? 'success' : 'danger'} size="sm">
+                          {selectedLog.status}
+                        </Badge>
+                    )}
+                </div>
+            }
+            footer={
+                <Button onClick={() => setIsDetailOpen(false)} variant="secondary">
+                    {t('common.close')}
+                </Button>
+            }
+        >
+            <div className="p-2">
+                {isDetailLoading ? (
+                    <div className="flex flex-col items-center justify-center h-64">
+                        <Loader2 className="w-10 h-10 text-gray-900 animate-spin mb-4" />
+                        <p className="text-gray-500 dark:text-gray-400 font-medium">{t('logs.detail.loading')}</p>
                     </div>
-
-                    <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-                        {isDetailLoading ? (
-                            <div className="flex flex-col items-center justify-center h-64">
-                                <Loader2 className="w-10 h-10 text-gray-900 animate-spin mb-4" />
-                                <p className="text-gray-500 dark:text-gray-400 font-medium">{t('logs.detail.loading')}</p>
-                            </div>
-                        ) : selectedLog ? (
-                            <div className="space-y-8 animate-fade-in">
-                                {/* Info Grid */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="space-y-4">
-                                        <h3 className="text-sm font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 uppercase tracking-wide">{t('logs.detail.info')}</h3>
-                                        <div className="space-y-3">
-                                            <div className="flex justify-between items-start group">
-                                                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.detail.requestId')}</span>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm font-mono text-gray-700 dark:text-gray-300 break-all">{selectedLog.requestId}</span>
-                                                    <button
-                                                        onClick={() => handleCopy(selectedLog.requestId, 'reqId')}
-                                                        className="text-gray-300 dark:text-gray-600 hover:text-black dark:hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    >
-                                                        {copyFeedback === 'reqId' ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.detail.created')}</span>
-                                                <span className="text-sm text-gray-700 dark:text-gray-300 font-mono">
-                                                    {selectedLog.createdAt ? new Date(selectedLog.createdAt).toLocaleString() : new Date(selectedLog.requestTime * 1000).toLocaleString()}
-                                                </span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.detail.provider')}</span>
-                                                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{selectedLog.providerName} <span className="text-gray-400 dark:text-gray-500 font-normal ml-1 text-xs">(ID: {selectedLog.providerId})</span></span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.table.requestModel')}</span>
-                                                <span className="text-xs font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-2.5 py-1 rounded-md">{selectedLog.requestModelName || 'N/A'}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.table.actualModel')}</span>
-                                                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{selectedLog.actualModelName || '-'}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.detail.type')}</span>
-                                                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{selectedLog.requestType}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-4">
-                                        <h3 className="text-sm font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 uppercase tracking-wide">{t('logs.detail.performance')}</h3>
-                                        <div className="space-y-3">
-                                            <div className="flex justify-between">
-                                                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.table.latency')}</span>
-                                                <span className="text-sm font-mono font-semibold text-gray-700 dark:text-gray-300">{selectedLog.firstTokenMs} ms</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.detail.duration')}</span>
-                                                <span className="text-sm font-mono font-semibold text-gray-700 dark:text-gray-300">{selectedLog.totalTimeMs} ms</span>
-                                            </div>
-                                            <div className="flex justify-between items-start">
-                                                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.table.tokens')}</span>
-                                                <div className="text-right">
-                                                    <div className="text-sm font-mono font-bold text-gray-700 dark:text-gray-300">{selectedLog.inputTokens + selectedLog.outputTokens} Total</div>
-                                                    <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                                                        <span className="text-emerald-600 dark:text-emerald-400">{selectedLog.inputTokens} in</span> / <span className="text-blue-600 dark:text-blue-400">{selectedLog.outputTokens} out</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.table.cost')}</span>
-                                                <span className="text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded">${selectedLog.cost.toFixed(6)}</span>
-                                            </div>
-                                             <div className="flex justify-between">
-                                                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.detail.retry')}</span>
-                                                <span className="text-sm font-mono text-gray-700 dark:text-gray-300">{selectedLog.retryCount}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {renderPayloadSection(
-                                    t('logs.detail.content'),
-                                    selectedPayloads?.requestContent,
-                                    'requestContent',
-                                    t('logs.detail.noRequestContent'),
-                                    t('logs.detail.loadRequestContent')
-                                )}
-
-                                {renderPayloadSection(
-                                    t('logs.detail.responseContent'),
-                                    selectedPayloads?.responseContent,
-                                    'responseContent',
-                                    t('logs.detail.noResponseContent'),
-                                    t('logs.detail.loadResponseContent')
-                                )}
-
-                                {/* Error Message Section */}
-                                {selectedLog.errorMessage && (
-                                    <div className="animate-in slide-in-from-bottom-2">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <h3 className="text-sm font-bold text-red-600 dark:text-red-400 uppercase tracking-wide">{t('logs.detail.error')}</h3>
+                ) : selectedLog ? (
+                    <div className="space-y-8 animate-fade-in">
+                        {/* Info Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 uppercase tracking-wide">{t('logs.detail.info')}</h3>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-start group">
+                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.detail.requestId')}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-mono text-gray-700 dark:text-gray-300 break-all">{selectedLog.requestId}</span>
                                             <button
-                                                onClick={() => handleCopy(selectedLog.errorMessage || '', 'error')}
-                                                className="text-xs flex items-center font-medium px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors text-red-600 dark:text-red-400"
+                                                onClick={() => handleCopy(selectedLog.requestId, 'reqId')}
+                                                className="text-gray-300 dark:text-gray-600 hover:text-black dark:hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
                                             >
-                                                {copyFeedback === 'error' ? <Check size={14} className="mr-1" /> : <Copy size={14} className="mr-1" />}
-                                                {copyFeedback === 'error' ? t('common.copied') : t('common.copy')}
+                                                {copyFeedback === 'reqId' ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
                                             </button>
                                         </div>
-                                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-5 overflow-hidden">
-                                            <pre className="text-xs font-mono text-red-800 dark:text-red-300 whitespace-pre-wrap break-words max-h-48 overflow-y-auto custom-scrollbar">
-                                                {selectedLog.errorMessage}
-                                            </pre>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.detail.created')}</span>
+                                        <span className="text-sm text-gray-700 dark:text-gray-300 font-mono">
+                                            {selectedLog.createdAt ? new Date(selectedLog.createdAt).toLocaleString() : new Date(selectedLog.requestTime * 1000).toLocaleString()}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.detail.provider')}</span>
+                                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{selectedLog.providerName} <span className="text-gray-400 dark:text-gray-500 font-normal ml-1 text-xs">(ID: {selectedLog.providerId})</span></span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.table.requestModel')}</span>
+                                        <span className="text-xs font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-2.5 py-1 rounded-md">{selectedLog.requestModelName || 'N/A'}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.table.actualModel')}</span>
+                                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{selectedLog.actualModelName || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.detail.type')}</span>
+                                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{selectedLog.requestType}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2 uppercase tracking-wide">{t('logs.detail.performance')}</h3>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between">
+                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.table.latency')}</span>
+                                        <span className="text-sm font-mono font-semibold text-gray-700 dark:text-gray-300">{selectedLog.firstTokenMs} ms</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.detail.duration')}</span>
+                                        <span className="text-sm font-mono font-semibold text-gray-700 dark:text-gray-300">{selectedLog.totalTimeMs} ms</span>
+                                    </div>
+                                    <div className="flex justify-between items-start">
+                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.table.tokens')}</span>
+                                        <div className="text-right">
+                                            <div className="text-sm font-mono font-bold text-gray-700 dark:text-gray-300">{selectedLog.inputTokens + selectedLog.outputTokens} Total</div>
+                                            <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                                                <span className="text-emerald-600 dark:text-emerald-400">{selectedLog.inputTokens} in</span> / <span className="text-blue-600 dark:text-blue-400">{selectedLog.outputTokens} out</span>
+                                            </div>
                                         </div>
                                     </div>
-                                )}
+                                    <div className="flex justify-between">
+                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.table.cost')}</span>
+                                        <span className="text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded">${selectedLog.cost.toFixed(6)}</span>
+                                    </div>
+                                     <div className="flex justify-between">
+                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('logs.detail.retry')}</span>
+                                        <span className="text-sm font-mono text-gray-700 dark:text-gray-300">{selectedLog.retryCount}</span>
+                                    </div>
+                                </div>
                             </div>
-                        ) : (
-                            <div className="text-center text-gray-500 dark:text-gray-400 py-12">
-                                {t('logs.detail.failed')}
+                        </div>
+
+                        {renderPayloadSection(
+                            t('logs.detail.content'),
+                            selectedPayloads?.requestContent,
+                            'requestContent',
+                            t('logs.detail.noRequestContent'),
+                            t('logs.detail.loadRequestContent')
+                        )}
+
+                        {renderPayloadSection(
+                            t('logs.detail.responseContent'),
+                            selectedPayloads?.responseContent,
+                            'responseContent',
+                            t('logs.detail.noResponseContent'),
+                            t('logs.detail.loadResponseContent')
+                        )}
+
+                        {/* Error Message Section */}
+                        {selectedLog.errorMessage && (
+                            <div className="animate-in slide-in-from-bottom-2">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-sm font-bold text-red-600 dark:text-red-400 uppercase tracking-wide">{t('logs.detail.error')}</h3>
+                                    <button
+                                        onClick={() => handleCopy(selectedLog.errorMessage || '', 'error')}
+                                        className="text-xs flex items-center font-medium px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors text-red-600 dark:text-red-400"
+                                    >
+                                        {copyFeedback === 'error' ? <Check size={14} className="mr-1" /> : <Copy size={14} className="mr-1" />}
+                                        {copyFeedback === 'error' ? t('common.copied') : t('common.copy')}
+                                    </button>
+                                </div>
+                                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-5 overflow-hidden">
+                                    <pre className="text-xs font-mono text-red-800 dark:text-red-300 whitespace-pre-wrap break-words max-h-48 overflow-y-auto custom-scrollbar">
+                                        {selectedLog.errorMessage}
+                                    </pre>
+                                </div>
                             </div>
                         )}
                     </div>
-
-                    <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex justify-end bg-white/50 dark:bg-[#1a1a1a]/50 backdrop-blur">
-                         <button
-                            onClick={() => setIsDetailOpen(false)}
-                            className="px-6 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm text-sm font-semibold rounded-xl text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                        >
-                            {t('common.close')}
-                        </button>
+                ) : (
+                    <div className="text-center text-gray-500 dark:text-gray-400 py-12">
+                        {t('logs.detail.failed')}
                     </div>
-                </div>
+                )}
             </div>
-        )}
+        </Modal>
     </div>
   );
 };

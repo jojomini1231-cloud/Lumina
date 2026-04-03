@@ -69,6 +69,7 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
 
         return applyTimeout(result, timeoutMs)
                 .doOnNext(event -> {
+                    System.out.println("[SSE] raw event: {}"+ event);
                     String data = event.data();
                     if (data == null) return;
                     if (ctx.getFirstTokenArrived().compareAndSet(false, true)) {

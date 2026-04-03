@@ -20,7 +20,6 @@ import {
   Coins,
   Database,
   Gauge,
-  RefreshCw,
   Server,
   ShieldAlert,
   Sigma,
@@ -152,6 +151,7 @@ export const Dashboard: React.FC = () => {
   const [providerRanking, setProviderRanking] = useState<ProviderStats[]>([]);
   const [observability, setObservability] = useState<DashboardObservability | null>(null);
   const [lastRuntimeRefresh, setLastRuntimeRefresh] = useState<string>('--:--:--');
+  const [isRefreshingRuntime, setIsRefreshingRuntime] = useState<boolean>(false);
   const [runtimePagination, setRuntimePagination] = useState({
     current: 1,
     size: 8,
@@ -222,6 +222,7 @@ export const Dashboard: React.FC = () => {
     };
 
     const refreshRuntimeData = async () => {
+      setIsRefreshingRuntime(true);
       try {
         const runtime = await dashboardService.getObservability();
         if (!active) {
@@ -233,6 +234,8 @@ export const Dashboard: React.FC = () => {
         );
       } catch (error) {
         console.error('Failed to refresh observability data', error);
+      } finally {
+        if (active) setIsRefreshingRuntime(false);
       }
     };
 
@@ -548,8 +551,13 @@ export const Dashboard: React.FC = () => {
             <h2 className="text-base font-semibold text-gray-900 dark:text-white">{t('dashboard.observability.title')}</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.observability.subtitle')}</p>
           </div>
-          <div className="inline-flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 rounded-full border border-gray-200 dark:border-gray-700 px-3 py-1.5">
-            <RefreshCw size={14} />
+          <div className="inline-flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 rounded-full border border-gray-200 dark:border-gray-700 px-3 py-1.5 bg-gray-50/50 dark:bg-gray-800/30">
+            <div className="relative flex h-2 w-2">
+              {isRefreshingRuntime && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              )}
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${isRefreshingRuntime ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}></span>
+            </div>
             {t('dashboard.observability.autoRefresh', { seconds: 10, time: lastRuntimeRefresh })}
           </div>
         </div>

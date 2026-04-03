@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Search, BrainCircuit, Wrench, RefreshCw, Database, Cpu, Calendar, CheckCircle2, AlertCircle, Activity, Tag } from 'lucide-react';
+import { Search, BrainCircuit, Wrench, RefreshCw, Database, Cpu, Calendar, Tag } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
 import { modelService } from '../services/modelService';
 import { ModelPrice } from '../types';
 import { CardGridSkeleton } from './Skeletons';
 import { SlideInItem } from './Animations';
 import { Pagination } from './Pagination';
+import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { useToast } from './ui/ToastContext';
 
 export const Pricing: React.FC = () => {
   const { t } = useLanguage();
+  const { showToast } = useToast();
   
   // State
   const [models, setModels] = useState<ModelPrice[]>([]);
@@ -21,14 +25,6 @@ export const Pricing: React.FC = () => {
     pages: 0
   });
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // Toast State
-  const [toast, setToast] = useState<{show: boolean, message: string, type: 'success' | 'error' | 'info'}>({ show: false, message: '', type: 'success' });
-
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ show: true, message, type });
-    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
-  };
 
   // Fetch Models
   const fetchModels = async (page: number, size: number, keyword: string) => {
@@ -82,40 +78,26 @@ export const Pricing: React.FC = () => {
   };
 
   const formatPrice = (price: number) => {
-    if (price === 0) return <span className="text-emerald-600 dark:text-emerald-400 font-bold">Free</span>;
+    if (price === 0) return <Badge tone="success" size="xs">Free</Badge>;
     return `$${price.toFixed(2)}`;
   };
 
   return (
     <div className="space-y-6 relative flex flex-col h-full">
-      {/* Toast Notification */}
-      {toast.show && (
-          <div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-lg shadow-float border flex items-center animate-in slide-in-from-right duration-300 backdrop-blur-md ${
-              toast.type === 'success' ? 'bg-white border-green-200 text-green-700 dark:bg-[#1a1a1a] dark:border-green-900 dark:text-green-400' : 
-              toast.type === 'error' ? 'bg-white border-red-200 text-red-700 dark:bg-[#1a1a1a] dark:border-red-900 dark:text-red-400' :
-              'bg-white border-blue-200 text-blue-700 dark:bg-[#1a1a1a] dark:border-blue-900 dark:text-blue-400'
-          }`}>
-              {toast.type === 'success' ? <CheckCircle2 size={18} className="mr-2" /> : 
-               toast.type === 'error' ? <AlertCircle size={18} className="mr-2" /> :
-               <Activity size={18} className="mr-2" />}
-              <span className="text-sm font-medium">{toast.message}</span>
-          </div>
-      )}
-
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">{t('pricing.title')}</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg">{t('pricing.subtitle')}</p>
         </div>
          <div className="flex space-x-2">
-            <button 
-                onClick={handleSync}
-                disabled={isSyncing}
-                className="group flex items-center px-4 py-2 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-800 rounded-xl text-sm font-semibold shadow-sm transition-all hover:bg-gray-50 dark:hover:bg-gray-800 hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed"
+            <Button
+              onClick={handleSync}
+              disabled={isSyncing}
+              variant="secondary"
+              leftIcon={<RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />}
             >
-                <RefreshCw size={16} className={`mr-2 group-hover:rotate-180 transition-transform duration-500 ${isSyncing ? 'animate-spin' : ''}`} />
-                {isSyncing ? t('pricing.sync') + '...' : t('pricing.sync')}
-            </button>
+              {isSyncing ? t('pricing.sync') + '...' : t('pricing.sync')}
+            </Button>
         </div>
       </div>
 
@@ -173,9 +155,7 @@ export const Pricing: React.FC = () => {
                                             {model.modelName}
                                         </h3>
                                         <div className="mt-3 flex items-center gap-2">
-                                            <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 uppercase tracking-wide">
-                                                {model.provider}
-                                            </span>
+                                            <Badge tone="neutral" size="xs">{model.provider}</Badge>
                                             {/* Capabilities Icons */}
                                             <div className="flex gap-1.5">
                                                 {model.isReasoning && (

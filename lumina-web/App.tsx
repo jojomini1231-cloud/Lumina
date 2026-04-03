@@ -11,6 +11,7 @@ import { AuthProvider, useAuth } from './components/AuthContext';
 import { ViewState } from './types';
 import { LanguageProvider } from './components/LanguageContext';
 import { ThemeProvider } from './components/ThemeContext';
+import { ToastProvider } from './components/ui/ToastContext';
 import { Loader2 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
@@ -59,9 +60,11 @@ const App: React.FC = () => {
     return (
         <LanguageProvider>
           <ThemeProvider>
-            <AuthProvider>
-              <AppContent />
-            </AuthProvider>
+            <ToastProvider>
+              <AuthProvider>
+                <AppContent />
+              </AuthProvider>
+            </ToastProvider>
           </ThemeProvider>
         </LanguageProvider>
     );

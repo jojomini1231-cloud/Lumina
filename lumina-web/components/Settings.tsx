@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, Shield, Monitor, Globe, Plus, Trash2, Copy, Check, X, Key, Loader2, User as UserIcon, CheckCircle2, AlertCircle, Activity } from 'lucide-react';
+import { Save, Shield, Monitor, Globe, Plus, Trash2, Copy, Check, X, Key, Loader2, User as UserIcon } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
 import { tokenService } from '../services/tokenService';
 import { userService } from '../services/userService';
@@ -8,19 +8,15 @@ import { useAuth } from './AuthContext';
 import { useTheme } from './ThemeContext';
 import { SlideInItem } from './Animations';
 import { CircuitBreakerSettingsPanel } from './CircuitBreakerSettingsPanel';
+import { Button } from './ui/Button';
+import { Modal } from './ui/Modal';
+import { useToast } from './ui/ToastContext';
 
 export const Settings: React.FC = () => {
   const { t, language, setLanguage } = useLanguage();
   const { theme, setTheme } = useTheme();
   const { user, logout } = useAuth();
-
-  // Toast State
-  const [toast, setToast] = useState<{show: boolean, message: string, type: 'success' | 'error' | 'info'}>({ show: false, message: '', type: 'success' });
-  
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ show: true, message, type });
-    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
-  };
+  const { showToast } = useToast();
 
   // Account Settings State
   const [username, setUsername] = useState(user?.username || '');
@@ -133,20 +129,6 @@ export const Settings: React.FC = () => {
 
   return (
     <div className="space-y-8 relative">
-       {/* Toast Notification */}
-       {toast.show && (
-          <div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-xl shadow-float border flex items-center animate-in slide-in-from-right duration-300 backdrop-blur-md ${
-              toast.type === 'success' ? 'bg-white border-green-200 text-green-700 dark:bg-[#1a1a1a] dark:border-green-900 dark:text-green-400' : 
-              toast.type === 'error' ? 'bg-white border-red-200 text-red-700 dark:bg-[#1a1a1a] dark:border-red-900 dark:text-red-400' :
-              'bg-white border-blue-200 text-blue-700 dark:bg-[#1a1a1a] dark:border-blue-900 dark:text-blue-400'
-          }`}>
-              {toast.type === 'success' ? <CheckCircle2 size={18} className="mr-2" /> : 
-               toast.type === 'error' ? <AlertCircle size={18} className="mr-2" /> :
-               <Activity size={18} className="mr-2" />}
-              <span className="text-sm font-medium">{toast.message}</span>
-          </div>
-      )}
-
       <SlideInItem>
         <div>
             <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">{t('settings.title')}</h1>
@@ -253,14 +235,14 @@ export const Settings: React.FC = () => {
                             </div>
                         </div>
                         <div className="pt-2">
-                            <button 
-                                type="submit" 
-                                disabled={isUpdatingProfile}
-                                className="flex items-center px-5 py-2.5 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black text-sm font-semibold rounded-xl shadow-sm transition-all hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed"
+                            <Button
+                              type="submit"
+                              disabled={isUpdatingProfile}
+                              variant="primary"
+                              leftIcon={isUpdatingProfile ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
                             >
-                                {isUpdatingProfile ? <Loader2 size={18} className="mr-2 animate-spin" /> : <Save size={18} className="mr-2" />}
-                                {t('settings.update')}
-                            </button>
+                              {t('settings.update')}
+                            </Button>
                         </div>
                     </form>
                 </div>
@@ -283,12 +265,9 @@ export const Settings: React.FC = () => {
                     {t('settings.securityDesc')}
                     </p>
                     <div className="mt-5">
-                        <button 
-                        onClick={handleManageTokens}
-                        className="px-5 py-2.5 border border-gray-200 dark:border-gray-700 shadow-sm text-sm font-semibold rounded-xl text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                        >
+                        <Button onClick={handleManageTokens} variant="secondary">
                             {t('settings.manageTokens')}
-                        </button>
+                        </Button>
                     </div>
                 </div>
                 </div>
@@ -298,7 +277,7 @@ export const Settings: React.FC = () => {
 
         {/* Section: Circuit Breaker */}
         <SlideInItem index={4}>
-            <CircuitBreakerSettingsPanel showToast={showToast} />
+            <CircuitBreakerSettingsPanel />
         </SlideInItem>
 
         {/* Section: Theme */}
@@ -348,146 +327,149 @@ export const Settings: React.FC = () => {
       </div>
 
       {/* --- Token Management Modal --- */}
-      {isTokenModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-float max-w-2xl w-full max-h-[85vh] flex flex-col animate-in zoom-in-95 duration-200 border border-gray-100 dark:border-gray-800">
-                <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-white/95 dark:bg-[#1a1a1a]/95 backdrop-blur z-10 rounded-t-2xl">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-lg">
-                            <Key size={20} />
-                        </div>
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t('settings.tokens.title')}</h2>
-                    </div>
-                    <button onClick={closeTokenModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-full p-1 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                        <X size={24} />
-                    </button>
+      <Modal
+        isOpen={isTokenModalOpen}
+        onClose={closeTokenModal}
+        size="lg"
+        title={
+            <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                    <Key size={20} />
                 </div>
+                <span className="text-xl">{t('settings.tokens.title')}</span>
+            </div>
+        }
+      >
+        <div className="p-2">
+            {/* Create Token Section (Or Success View) */}
+            {createdToken ? (
+                <div className="mb-8 p-6 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/50 rounded-2xl animate-in fade-in zoom-in-95">
+                    <div className="flex items-start gap-4">
+                        <CheckCircleIcon className="text-emerald-600 dark:text-emerald-500 mt-1 flex-shrink-0 w-6 h-6" />
+                        <div className="flex-1 min-w-0">
+                            <h3 className="text-base font-bold text-emerald-800 dark:text-emerald-400 mb-1">{t('settings.tokens.generatedSuccess')}</h3>
+                            <p className="text-sm text-emerald-700 dark:text-emerald-500 mb-4">{t('settings.tokens.copyWarning')}</p>
+                            
+                            <div className="flex items-center gap-2">
+                                <code className="flex-1 bg-white dark:bg-black border border-emerald-200 dark:border-emerald-800/50 px-4 py-3 rounded-xl font-mono text-sm text-gray-800 dark:text-gray-200 break-all shadow-sm">
+                                    {createdToken.token}
+                                </code>
+                                <Button
+                                    onClick={() => copyToClipboard(createdToken.token || '', 'new')}
+                                    variant="secondary"
+                                    className="w-12 px-0 bg-white dark:bg-black border border-emerald-200 dark:border-emerald-800/50 text-emerald-600 dark:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                                >
+                                    {copyFeedbackId === 'new' ? <Check size={20} /> : <Copy size={20} />}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="pl-10 mt-3">
+                        <button 
+                            onClick={() => setCreatedToken(null)}
+                            className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-300 underline underline-offset-2"
+                        >
+                            {t('settings.tokens.generateAnother')}
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <form onSubmit={handleCreateToken} className="mb-8 p-6 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800/50">
+                    <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-4 uppercase tracking-wide">{t('settings.tokens.create')}</h3>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <input 
+                            type="text" 
+                            value={newTokenName}
+                            onChange={(e) => setNewTokenName(e.target.value)}
+                            placeholder={t('settings.tokens.name') + ' (e.g. "Production App")'}
+                            className="flex-1 rounded-xl border-gray-200 dark:border-gray-700 text-sm focus:ring-black dark:focus:ring-white focus:border-black dark:focus:border-white py-2.5 px-4 border bg-white dark:bg-[#1a1a1a] dark:text-white transition-shadow"
+                            required
+                        />
+                        <Button
+                            type="submit" 
+                            disabled={isCreatingToken || !newTokenName.trim()}
+                            variant="primary"
+                            leftIcon={isCreatingToken ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+                        >
+                            {t('common.add')}
+                        </Button>
+                    </div>
+                </form>
+            )}
 
-                <div className="p-6 flex-1 overflow-y-auto custom-scrollbar">
-                    {/* Create Token Section (Or Success View) */}
-                    {createdToken ? (
-                        <div className="mb-8 p-6 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/50 rounded-2xl animate-in fade-in zoom-in-95">
-                            <div className="flex items-start gap-4">
-                                <CheckCircleIcon className="text-emerald-600 dark:text-emerald-500 mt-1 flex-shrink-0 w-6 h-6" />
-                                <div className="flex-1 min-w-0">
-                                    <h3 className="text-base font-bold text-emerald-800 dark:text-emerald-400 mb-1">{t('settings.tokens.generatedSuccess')}</h3>
-                                    <p className="text-sm text-emerald-700 dark:text-emerald-500 mb-4">{t('settings.tokens.copyWarning')}</p>
-                                    
-                                    <div className="flex items-center gap-2">
-                                        <code className="flex-1 bg-white dark:bg-black border border-emerald-200 dark:border-emerald-800/50 px-4 py-3 rounded-xl font-mono text-sm text-gray-800 dark:text-gray-200 break-all shadow-sm">
-                                            {createdToken.token}
-                                        </code>
-                                        <button 
-                                            onClick={() => copyToClipboard(createdToken.token || '', 'new')}
-                                            className="p-3 bg-white dark:bg-black border border-emerald-200 dark:border-emerald-800/50 text-emerald-600 dark:text-emerald-500 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors shadow-sm"
+            {/* Token List */}
+            <div>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4 uppercase tracking-wide">{t('settings.tokens.activeTokens')}</h3>
+                {isTokensLoading ? (
+                    <div className="flex justify-center py-12">
+                        <Loader2 className="w-8 h-8 text-gray-600 animate-spin" />
+                    </div>
+                ) : tokens.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900/50 border border-dashed border-gray-200 dark:border-gray-800 rounded-2xl">
+                        {t('settings.tokens.empty')}
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {tokens.map(token => (
+                            <div key={token.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-xl hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm transition-all">
+                                <div className="mb-3 sm:mb-0">
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                        <span className="font-bold text-gray-800 dark:text-gray-200">{token.name}</span>
+                                        <span className="text-xs font-mono bg-gray-100 dark:bg-gray-900 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded border border-gray-200 dark:border-gray-700 whitespace-nowrap">
+                                            {token.maskedToken}
+                                        </span>
+                                        <Button
+                                            onClick={() => copyToClipboard(token.token || '', token.id)}
+                                            variant="ghost"
+                                            className="px-2"
+                                            title={t('common.copy')}
                                         >
-                                            {copyFeedbackId === 'new' ? <Check size={20} /> : <Copy size={20} />}
-                                        </button>
+                                            {copyFeedbackId === token.id ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
+                                        </Button>
+                                    </div>
+                                    <div className="flex gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                        <span>{t('settings.tokens.created')}: {new Date(token.createdAt).toLocaleDateString()}</span>
+                                        <span>{t('settings.tokens.lastUsed')}: {token.lastUsedAt ? new Date(token.lastUsedAt).toLocaleDateString() : '-'}</span>
                                     </div>
                                 </div>
-                            </div>
-                            <div className="pl-10 mt-3">
-                                <button 
-                                    onClick={() => setCreatedToken(null)}
-                                    className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-300 underline underline-offset-2"
-                                >
-                                    {t('settings.tokens.generateAnother')}
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
-                        <form onSubmit={handleCreateToken} className="mb-8 p-6 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800/50">
-                            <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-4 uppercase tracking-wide">{t('settings.tokens.create')}</h3>
-                            <div className="flex flex-col sm:flex-row gap-3">
-                                <input 
-                                    type="text" 
-                                    value={newTokenName}
-                                    onChange={(e) => setNewTokenName(e.target.value)}
-                                    placeholder={t('settings.tokens.name') + ' (e.g. "Production App")'}
-                                    className="flex-1 rounded-xl border-gray-200 dark:border-gray-700 text-sm focus:ring-black dark:focus:ring-white focus:border-black dark:focus:border-white py-2.5 px-4 border bg-white dark:bg-[#1a1a1a] dark:text-white transition-shadow"
-                                    required
-                                />
-                                <button 
-                                    type="submit" 
-                                    disabled={isCreatingToken || !newTokenName.trim()}
-                                    className="px-5 py-2.5 bg-gray-900 hover:bg-black dark:bg-white dark:text-black dark:hover:bg-gray-200 text-white text-sm font-semibold rounded-xl disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center shadow-sm transition-all hover:-translate-y-0.5"
-                                >
-                                    {isCreatingToken ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} className="mr-2" />}
-                                    {t('common.add')}
-                                </button>
-                            </div>
-                        </form>
-                    )}
-
-                    {/* Token List */}
-                    <div>
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4 uppercase tracking-wide">{t('settings.tokens.activeTokens')}</h3>
-                        {isTokensLoading ? (
-                            <div className="flex justify-center py-12">
-                                <Loader2 className="w-8 h-8 text-gray-600 animate-spin" />
-                            </div>
-                        ) : tokens.length === 0 ? (
-                            <div className="text-center py-12 text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900/50 border border-dashed border-gray-200 dark:border-gray-800 rounded-2xl">
-                                {t('settings.tokens.empty')}
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                {tokens.map(token => (
-                                    <div key={token.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-xl hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm transition-all">
-                                        <div className="mb-3 sm:mb-0">
-                                            <div className="flex items-center gap-3 flex-wrap">
-                                                <span className="font-bold text-gray-800 dark:text-gray-200">{token.name}</span>
-                                                <span className="text-xs font-mono bg-gray-100 dark:bg-gray-900 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded border border-gray-200 dark:border-gray-700 whitespace-nowrap">
-                                                    {token.maskedToken}
-                                                </span>
-                                                <button 
-                                                    onClick={() => copyToClipboard(token.token || '', token.id)}
-                                                    className="p-1.5 text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                                                    title={t('common.copy')}
-                                                >
-                                                    {copyFeedbackId === token.id ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
-                                                </button>
-                                            </div>
-                                            <div className="flex gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
-                                                <span>{t('settings.tokens.created')}: {new Date(token.createdAt).toLocaleDateString()}</span>
-                                                <span>{t('settings.tokens.lastUsed')}: {token.lastUsedAt ? new Date(token.lastUsedAt).toLocaleDateString() : '-'}</span>
-                                            </div>
-                                        </div>
-                                        
-                                        {revokeId === token.id ? (
-                                            <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 p-2 rounded-xl border border-red-100 dark:border-red-900/50 animate-in fade-in slide-in-from-right-2 mt-2 sm:mt-0">
-                                                <span className="text-xs text-red-700 dark:text-red-400 font-bold px-1">{t('settings.tokens.confirmRevokeShort')}</span>
-                                                <button 
-                                                    onClick={() => handleRevokeToken(token.id)}
-                                                    className="p-1.5 bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 rounded-lg shadow-sm hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
-                                                >
-                                                    <Check size={16} />
-                                                </button>
-                                                <button 
-                                                    onClick={() => setRevokeId(null)}
-                                                    className="p-1.5 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg shadow-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                                                >
-                                                    <X size={16} />
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <button 
-                                                onClick={() => setRevokeId(token.id)}
-                                                className="self-start sm:self-center p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors mt-2 sm:mt-0"
-                                                title={t('common.delete')}
-                                            >
-                                                <Trash2 size={20} />
-                                            </button>
-                                        )}
+                                
+                                {revokeId === token.id ? (
+                                    <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 p-2 rounded-xl border border-red-100 dark:border-red-900/50 animate-in fade-in slide-in-from-right-2 mt-2 sm:mt-0">
+                                        <span className="text-xs text-red-700 dark:text-red-400 font-bold px-1">{t('settings.tokens.confirmRevokeShort')}</span>
+                                        <Button
+                                            onClick={() => handleRevokeToken(token.id)}
+                                            variant="secondary"
+                                            size="sm"
+                                            className="px-2 bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30"
+                                        >
+                                            <Check size={16} />
+                                        </Button>
+                                        <Button
+                                            onClick={() => setRevokeId(null)}
+                                            variant="secondary"
+                                            size="sm"
+                                            className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        >
+                                            <X size={16} />
+                                        </Button>
                                     </div>
-                                ))}
+                                ) : (
+                                    <Button
+                                        onClick={() => setRevokeId(token.id)}
+                                        variant="ghost"
+                                        className="self-start sm:self-center px-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 mt-2 sm:mt-0"
+                                        title={t('common.delete')}
+                                    >
+                                        <Trash2 size={20} />
+                                    </Button>
+                                )}
                             </div>
-                        )}
+                        ))}
                     </div>
-                </div>
+                )}
             </div>
         </div>
-      )}
+      </Modal>
 
     </div>
   );
