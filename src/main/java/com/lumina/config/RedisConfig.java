@@ -11,6 +11,10 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
+import org.springframework.data.redis.listener.PatternTopic;
+import com.lumina.service.HotPathCacheService;
 
 @Configuration
 public class RedisConfig {
@@ -53,5 +57,19 @@ public class RedisConfig {
 
         template.afterPropertiesSet();
         return template;
+    }
+
+    @Bean
+    RedisMessageListenerContainer container(RedisConnectionFactory connectionFactory,
+                                            MessageListenerAdapter listenerAdapter) {
+        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
+        container.setConnectionFactory(connectionFactory);
+        container.addMessageListener(listenerAdapter, new PatternTopic("lumina:cache:invalidation"));
+        return container;
+    }
+
+    @Bean
+    MessageListenerAdapter listenerAdapter(HotPathCacheService hotPathCacheService) {
+        return new MessageListenerAdapter(hotPathCacheService, "receiveInvalidationMessage");
     }
 }

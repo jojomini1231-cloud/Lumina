@@ -157,13 +157,19 @@ public class CircuitBreaker {
 
         // 尝试 CAS 转换到 HALF_OPEN
         if (state.tryTransitionTo(CircuitState.OPEN, CircuitState.HALF_OPEN)) {
-            state.initHalfOpen(config.getPermittedCallsInHalfOpen());
-            state.recordStateTransition("probe_time_reached", System.currentTimeMillis());
-            state.markDirty();
-            eventLogger.logHalfOpen(state);
-            log.info("Provider {} 熔断器进入 HALF_OPEN 状态，允许 {} 个探测请求",
-                    state.getProviderId(), config.getPermittedCallsInHalfOpen());
-            return state.tryAcquireProbe();
+            // 通过 synchronized 块确保状态初始化和配额分配的原子性，避免极高并发下的竞争泄漏
+            synchronized (state) {
+                // Double check 确保当前确实是 HALF_OPEN
+                if (state.getCircuitState() == CircuitState.HALF_OPEN) {
+                    state.initHalfOpen(config.getPermittedCallsInHalfOpen());
+                    state.recordStateTransition("probe_time_reached", System.currentTimeMillis());
+                    state.markDirty();
+                    eventLogger.logHalfOpen(state);
+                    log.info("Provider {} 熔断器进入 HALF_OPEN 状态，允许 {} 个探测请求",
+                            state.getProviderId(), config.getPermittedCallsInHalfOpen());
+                    return state.tryAcquireProbe();
+                }
+            }
         }
 
         // CAS 失败，检查是否能获取探测配额

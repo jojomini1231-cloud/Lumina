@@ -23,10 +23,10 @@ public class ProviderModelSyncJob {
     private final ProviderService providerService;
 
     /**
-     * 每小时执行一次模型同步
-     * fixedDelay = 3600000ms = 1小时
+     * 根据配置的时间间隔（单位：小时）执行模型同步
+     * 使用 SPEL 表达式将小时转换为毫秒
      */
-    @Scheduled(fixedDelay = 3_600_000, initialDelay = 60_000)
+    @Scheduled(fixedDelayString = "#{${lumina.sync.model-info-interval:24} * 3600000}", initialDelay = 60_000)
     public void syncProviderModels() {
         log.info("开始执行 Provider 模型自动同步任务");
 

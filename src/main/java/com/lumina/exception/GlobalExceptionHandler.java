@@ -21,6 +21,14 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(MaxFailoverExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxFailoverExceededException(MaxFailoverExceededException ex) {
+        log.error("Max failover exceeded: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(ApiResponse.error(503, "所有可用节点已尝试，服务暂时不可用"));
+    }
+
     @ExceptionHandler(WebExchangeBindException.class)
     public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationExceptions(
             WebExchangeBindException ex) {

@@ -54,6 +54,11 @@ public class LuminaProperties {
      */
     private Logging logging = new Logging();
 
+    /**
+     * Failover/路由配置
+     */
+    private Failover failover = new Failover();
+
     @Data
     public static class Proxy {
         private String url;
@@ -122,5 +127,12 @@ public class LuminaProperties {
         private int batchSize = 100;
         private int flushIntervalMs = 500;
         private double successPayloadSampleRate = 1.0;
+    }
+
+    @Data
+    public static class Failover {
+        private int topK = 3;
+        private double softmaxT = 10.0;
+        private double halfOpenWeightFactor = 0.5;
     }
 }

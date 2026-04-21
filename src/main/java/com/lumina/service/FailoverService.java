@@ -42,10 +42,7 @@ public class FailoverService {
     private final CircuitBreaker circuitBreaker;
     private final CircuitBreakerConfigResolver configResolver;
     private final RelayMetrics relayMetrics;
-
-    private static final int TOP_K = 3;
-    private static final double SOFTMAX_T = 10.0;
-    private static final double HALF_OPEN_WEIGHT_FACTOR = 0.5;
+    private final com.lumina.config.LuminaProperties luminaProperties;
 
     private final ConcurrentHashMap<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
 
@@ -191,7 +188,8 @@ public class FailoverService {
                 .toList();
 
         // 3. 取 Top-K
-        List<ModelGroupConfigItem> topK = sorted.subList(0, Math.min(TOP_K, sorted.size()));
+        int topKSize = Math.min(luminaProperties.getFailover().getTopK(), sorted.size());
+        List<ModelGroupConfigItem> topK = sorted.subList(0, topKSize);
 
         // 4. 计算 Softmax 权重
         double[] weights = new double[topK.size()];
@@ -199,7 +197,7 @@ public class FailoverService {
 
         for (int i = 0; i < topK.size(); i++) {
             double score = getSelectionScore(topK.get(i));
-            double w = Math.exp(score / SOFTMAX_T);
+            double w = Math.exp(score / luminaProperties.getFailover().getSoftmaxT());
             weights[i] = w;
             sum += w;
         }
@@ -240,7 +238,7 @@ public class FailoverService {
     private double getEffectiveScore(ProviderRuntimeState state) {
         double score = state.getScore();
         if (state.getCircuitState() == CircuitState.HALF_OPEN) {
-            score *= HALF_OPEN_WEIGHT_FACTOR;
+            score *= luminaProperties.getFailover().getHalfOpenWeightFactor();
         }
         return score;
     }
@@ -249,7 +247,7 @@ public class FailoverService {
         ProviderRuntimeState state = providerStateRegistry.get(generateProviderId(item));
         double score = getEffectiveScore(state);
         int configuredWeight = Math.max(1, item.getWeight() == null ? 1 : item.getWeight());
-        return score + SOFTMAX_T * Math.log(configuredWeight);
+        return score + luminaProperties.getFailover().getSoftmaxT() * Math.log(configuredWeight);
     }
 
     public Mono<ObjectNode> executeWithFailoverMono(
@@ -469,7 +467,12 @@ public class FailoverService {
                         scoreCalculator.update(state, failureType, duration);
                         circuitBreaker.onFailure(state, failureType, effectiveConfig);
                         relayMetrics.recordFailoverDepth(attemptCount);
-                        return Flux.error(error);
+                        // 中断传输的降级提示
+                        String errorMessage = "{\"error\": {\"message\": \"网关传输中途发生网络异常中断，请稍后重试。\"}}";
+                        return Flux.just(ServerSentEvent.<String>builder()
+                                .data(errorMessage)
+                                .build())
+                                .concatWith(Flux.error(error));
                     }
                 });
     }

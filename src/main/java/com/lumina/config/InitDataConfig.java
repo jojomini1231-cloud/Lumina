@@ -6,9 +6,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Component
 public class InitDataConfig implements CommandLineRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(InitDataConfig.class);
 
     @Autowired
     private UserService userService;
@@ -29,7 +33,7 @@ public class InitDataConfig implements CommandLineRunner {
             admin.setUsername("admin");
             admin.setPassword(passwordEncoder.encode("admin123"));
             userService.save(admin);
-            System.out.println("Created default admin user: admin/admin123");
+            log.info("Created default admin user: admin/admin123");
         }
     }
 }

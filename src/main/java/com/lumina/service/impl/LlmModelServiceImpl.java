@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 
 import java.io.Serializable;
@@ -30,8 +31,10 @@ public class LlmModelServiceImpl extends ServiceImpl<LlmModelMapper, LlmModel> i
     @Autowired
     private HotPathCacheService hotPathCacheService;
 
+    @Autowired
+    private TransactionTemplate transactionTemplate;
+
     @Override
-    @Transactional
     public void syncModels() {
         Map<String, ModelDevDTO> response = restClient.get()
                 .uri("https://models.dev/api.json")
@@ -80,10 +83,10 @@ public class LlmModelServiceImpl extends ServiceImpl<LlmModelMapper, LlmModel> i
         }
 
         if (!models.isEmpty()) {
-            // Delete all existing models
-            this.remove(new QueryWrapper<>());
-            // Save new models
-            this.saveBatch(models);
+            transactionTemplate.executeWithoutResult(status -> {
+                // Upsert new models based on model_name
+                this.saveOrUpdateBatch(models);
+            });
             hotPathCacheService.invalidateAllModelPrices();
         }
     }

@@ -69,7 +69,7 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
 
         return applyTimeout(result, timeoutMs)
                 .doOnNext(event -> {
-                    System.out.println("[SSE] raw event: {}"+ event);
+                    log.debug("[SSE] raw event: {}", event);
                     String data = event.data();
                     if (data == null) return;
                     if (ctx.getFirstTokenArrived().compareAndSet(false, true)) {
@@ -83,7 +83,14 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
                         }
                     }
                 })
-                .doOnError(err -> recordError(ctx, err))
+                .onErrorResume(err -> {
+                    recordError(ctx, err);
+                    String errorMessage = "{\"error\": {\"message\": \"网关传输中途发生网络异常中断，请稍后重试。\"}}";
+                    return Flux.just(ServerSentEvent.<String>builder()
+                            .data(errorMessage)
+                            .build())
+                            .concatWith(Flux.error(err));
+                })
                 .doOnComplete(() -> recordSuccess(ctx, ctx.getResponseBuffer().toString()));
     }
 }

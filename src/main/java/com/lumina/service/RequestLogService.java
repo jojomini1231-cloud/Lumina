@@ -13,4 +13,6 @@ public interface RequestLogService extends IService<RequestLog> {
     RequestLogDetailDto getDetailMetaById(String id);
 
     RequestLogPayloadDto getPayloadsById(String id);
+
+    int deleteLogsOlderThan(long timestamp);
 }

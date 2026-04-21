@@ -5,13 +5,19 @@ import com.lumina.dto.ModelGroupConfig;
 import com.lumina.entity.LlmModel;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 @Service
 public class HotPathCacheService {
+
+    private static final Logger log = LoggerFactory.getLogger(HotPathCacheService.class);
+    private static final String INVALIDATION_CHANNEL = "lumina:cache:invalidation";
 
     private final ConcurrentHashMap<String, CacheEntry<ModelGroupConfig>> groupConfigCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CacheEntry<Boolean>> apiKeyValidityCache = new ConcurrentHashMap<>();
@@ -21,12 +27,14 @@ public class HotPathCacheService {
     private final long apiKeyTtlMs;
     private final long modelPriceTtlMs;
     private final MeterRegistry meterRegistry;
+    private final StringRedisTemplate stringRedisTemplate;
 
-    public HotPathCacheService(LuminaProperties properties, MeterRegistry meterRegistry) {
+    public HotPathCacheService(LuminaProperties properties, MeterRegistry meterRegistry, StringRedisTemplate stringRedisTemplate) {
         this.groupConfigTtlMs = properties.getCache().getGroupConfigTtlSeconds() * 1000L;
         this.apiKeyTtlMs = properties.getCache().getApiKeyTtlSeconds() * 1000L;
         this.modelPriceTtlMs = properties.getCache().getModelPriceTtlSeconds() * 1000L;
         this.meterRegistry = meterRegistry;
+        this.stringRedisTemplate = stringRedisTemplate;
     }
 
     public ModelGroupConfig getCachedGroupConfig(String key) {
@@ -54,33 +62,65 @@ public class HotPathCacheService {
     }
 
     public void invalidateGroupConfig(String key) {
-        groupConfigCache.remove(key);
-        meterRegistry.counter("lumina_cache_invalidations_total", "cache", "group_config").increment();
+        stringRedisTemplate.convertAndSend(INVALIDATION_CHANNEL, "group_config:" + key);
     }
 
     public void invalidateAllGroupConfigs() {
-        groupConfigCache.clear();
-        meterRegistry.counter("lumina_cache_invalidations_total", "cache", "group_config").increment();
+        stringRedisTemplate.convertAndSend(INVALIDATION_CHANNEL, "group_config:ALL");
     }
 
     public void invalidateApiKey(String apiKey) {
-        apiKeyValidityCache.remove(apiKey);
-        meterRegistry.counter("lumina_cache_invalidations_total", "cache", "api_key").increment();
+        stringRedisTemplate.convertAndSend(INVALIDATION_CHANNEL, "api_key:" + apiKey);
     }
 
     public void invalidateAllApiKeys() {
-        apiKeyValidityCache.clear();
-        meterRegistry.counter("lumina_cache_invalidations_total", "cache", "api_key").increment();
+        stringRedisTemplate.convertAndSend(INVALIDATION_CHANNEL, "api_key:ALL");
     }
 
     public void invalidateModelPrice(String modelName) {
-        modelPriceCache.remove(modelName);
-        meterRegistry.counter("lumina_cache_invalidations_total", "cache", "model_price").increment();
+        stringRedisTemplate.convertAndSend(INVALIDATION_CHANNEL, "model_price:" + modelName);
     }
 
     public void invalidateAllModelPrices() {
-        modelPriceCache.clear();
-        meterRegistry.counter("lumina_cache_invalidations_total", "cache", "model_price").increment();
+        stringRedisTemplate.convertAndSend(INVALIDATION_CHANNEL, "model_price:ALL");
+    }
+
+    public void receiveInvalidationMessage(String message) {
+        if (message == null) return;
+        String[] parts = message.split(":", 2);
+        if (parts.length != 2) return;
+
+        String cacheName = parts[0];
+        String key = parts[1];
+
+        log.debug("Received invalidation message for cache '{}', key '{}'", cacheName, key);
+
+        switch (cacheName) {
+            case "group_config":
+                if ("ALL".equals(key)) {
+                    groupConfigCache.clear();
+                } else {
+                    groupConfigCache.remove(key);
+                }
+                meterRegistry.counter("lumina_cache_invalidations_total", "cache", "group_config").increment();
+                break;
+            case "api_key":
+                if ("ALL".equals(key)) {
+                    apiKeyValidityCache.clear();
+                } else {
+                    apiKeyValidityCache.remove(key);
+                }
+                meterRegistry.counter("lumina_cache_invalidations_total", "cache", "api_key").increment();
+                break;
+            case "model_price":
+                if ("ALL".equals(key)) {
+                    modelPriceCache.clear();
+                } else {
+                    modelPriceCache.remove(key);
+                }
+                meterRegistry.counter("lumina_cache_invalidations_total", "cache", "model_price").increment();
+                break;
+        }
     }
 
     private <T> T getIfPresent(ConcurrentHashMap<String, CacheEntry<T>> cache, String key, String cacheName) {

@@ -17,7 +17,10 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 public class GroupServiceImpl extends ServiceImpl<GroupMapper, Group> implements GroupService {
@@ -72,6 +75,18 @@ public class GroupServiceImpl extends ServiceImpl<GroupMapper, Group> implements
             throw new IllegalArgumentException("Failed to create group");
         }
         group.getGroupItems().forEach(item -> item.setGroupId(group.getId()));
+        
+        // 过滤掉请求中重复的项 (providerId + modelName)，并使用 LinkedHashMap 保持原有顺序
+        List<GroupItem> uniqueItems = group.getGroupItems().stream()
+                .collect(Collectors.toMap(
+                        item -> item.getProviderId() + "-" + item.getModelName(),
+                        item -> item,
+                        (existing, replacement) -> replacement,
+                        java.util.LinkedHashMap::new
+                ))
+                .values().stream().toList();
+        group.setGroupItems(uniqueItems);
+        
         groupItemService.saveBatch(group.getGroupItems());
         hotPathCacheService.invalidateAllGroupConfigs();
     }
@@ -85,12 +100,55 @@ public class GroupServiceImpl extends ServiceImpl<GroupMapper, Group> implements
         if (!success) {
             throw new IllegalArgumentException("Group not found with id: " + id);
         }
-        // 删除旧的关联
-        groupItemService.remove(new LambdaQueryWrapper<GroupItem>()
-                .eq(GroupItem::getGroupId, id));
-        // 批量插入新的关联
+        
+        // 绑定 groupId
         group.getGroupItems().forEach(item -> item.setGroupId(group.getId()));
-        groupItemService.saveBatch(group.getGroupItems());
+        
+        // 过滤掉请求中重复的项 (providerId + modelName)，并使用 LinkedHashMap 保持原有顺序
+        List<GroupItem> uniqueItems = group.getGroupItems().stream()
+                .collect(Collectors.toMap(
+                        item -> item.getProviderId() + "-" + item.getModelName(),
+                        item -> item,
+                        (existing, replacement) -> replacement,
+                        java.util.LinkedHashMap::new
+                ))
+                .values().stream().toList();
+        group.setGroupItems(uniqueItems);
+        
+        // 查出当前组的所有已有 item，根据 unique key (providerId + modelName) 匹配并回填 id
+        List<GroupItem> existingItems = groupItemService.list(
+                new LambdaQueryWrapper<GroupItem>().eq(GroupItem::getGroupId, id)
+        );
+        Map<String, Long> existingKeyToIdMap = existingItems.stream()
+                .collect(Collectors.toMap(
+                        item -> item.getProviderId() + "-" + item.getModelName(),
+                        GroupItem::getId,
+                        (existing, replacement) -> existing
+                ));
+                
+        group.getGroupItems().forEach(item -> {
+            String key = item.getProviderId() + "-" + item.getModelName();
+            if (existingKeyToIdMap.containsKey(key)) {
+                item.setId(existingKeyToIdMap.get(key));
+            }
+        });
+
+        // 使用 upsert（插入或更新）代替全删全插
+        groupItemService.saveOrUpdateBatch(group.getGroupItems());
+        
+        // 获取并删除本次更新中不存在的旧关联项
+        List<Long> currentItemIds = group.getGroupItems().stream()
+                .map(GroupItem::getId)
+                .filter(Objects::nonNull)
+                .toList();
+                
+        LambdaQueryWrapper<GroupItem> removeWrapper = new LambdaQueryWrapper<GroupItem>()
+                .eq(GroupItem::getGroupId, id);
+        if (!currentItemIds.isEmpty()) {
+            removeWrapper.notIn(GroupItem::getId, currentItemIds);
+        }
+        groupItemService.remove(removeWrapper);
+        
         hotPathCacheService.invalidateAllGroupConfigs();
     }
 

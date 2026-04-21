@@ -100,4 +100,16 @@ public class RequestLogServiceImpl extends ServiceImpl<RequestLogMapper, Request
         dto.setResponseContent(log.getResponseContent());
         return dto;
     }
+
+    @Override
+    @Transactional
+    public int deleteLogsOlderThan(long timestamp) {
+        LambdaQueryWrapper<RequestLog> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.lt(RequestLog::getRequestTime, timestamp);
+        long count = this.count(queryWrapper);
+        if (count > 0) {
+            this.remove(queryWrapper);
+        }
+        return (int) count;
+    }
 }
