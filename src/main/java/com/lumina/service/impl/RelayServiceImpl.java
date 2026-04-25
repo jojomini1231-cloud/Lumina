@@ -172,6 +172,8 @@ public class RelayServiceImpl implements RelayService {
                         model.put("object", "model");
                         model.put("created", createdTimestamp);
                         model.put("owned_by", "OpenAI");
+                        model.put("context_length", 1050000);
+                        model.put("max_completion_tokens", 128000);
                         dataArray.add(model);
                     }
 

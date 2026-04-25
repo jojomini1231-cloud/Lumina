@@ -316,18 +316,25 @@ public class FailoverService {
         }
 
         long startTime = System.currentTimeMillis();
+        java.util.concurrent.atomic.AtomicBoolean bulkheadReleased = new java.util.concurrent.atomic.AtomicBoolean(false);
+        Runnable releaseBulkhead = () -> {
+            if (bulkheadReleased.compareAndSet(false, true)) {
+                bulkhead.release();
+            }
+        };
         Mono<ObjectNode> result = callFunction.apply(item);
 
         return result
                 .doOnSuccess(response -> {
-                    bulkhead.release();
+                    releaseBulkhead.run();
                     long duration = System.currentTimeMillis() - startTime;
                     scoreCalculator.update(state, FailureType.SUCCESS, duration);
                     circuitBreaker.onSuccess(state, effectiveConfig);
                     relayMetrics.recordFailoverDepth(attemptCount);
                     log.debug("Provider {} 调用成功，耗时: {}ms, 新评分: {}", providerId, duration, state.getScore());
                 })
-                .doOnError(error -> bulkhead.release())
+                .doOnError(error -> releaseBulkhead.run())
+                .doOnCancel(releaseBulkhead)
                 .onErrorResume(error -> {
                     long duration = System.currentTimeMillis() - startTime;
                     FailureType failureType = classifyError(error);
