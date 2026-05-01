@@ -9,9 +9,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+
 import javax.crypto.SecretKey;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Collections;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
@@ -56,6 +59,14 @@ public class JwtUtil {
     private static final String CLAIM_TYPE = "type";
     private static final String TYPE_ACCESS = "access";
     private static final String TYPE_REFRESH = "refresh";
+
+    /**
+     * 原子校验 + 删除：Redis key 存在且值等于 expectedType 时删除并返回 1，否则返回 0
+     */
+    private static final DefaultRedisScript<Long> VALIDATE_AND_REVOKE_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end",
+            Long.class
+    );
 
     /**
      * 生成 Access Token
@@ -181,18 +192,36 @@ public class JwtUtil {
 
     /**
      * 刷新 token
-     * 先注销旧 refresh token，再签发新 token 对，防止旧 token 被重复使用
+     * 通过 Lua 脚本原子地校验 Redis 中的 token 类型并删除，并发请求只有一个能成功
      */
     public LoginResponse refreshToken(String refreshToken) {
         try {
-            if (!validateRefreshToken(refreshToken)) {
+            // 先做 JWT 签名和过期校验（纯本地，不依赖 Redis）
+            Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(getSigningKey())
+                    .build()
+                    .parseClaimsJws(refreshToken)
+                    .getBody();
+
+            String tokenType = claims.get(CLAIM_TYPE, String.class);
+            if (!TYPE_REFRESH.equals(tokenType)) {
+                log.warn("Refresh token type mismatch: actual={}", tokenType);
                 return null;
             }
 
-            String username = getUsernameFromToken(refreshToken);
+            String username = claims.getSubject();
 
-            // 先注销旧的 refresh token，关闭竞态窗口
-            revokeToken(refreshToken);
+            // 原子操作：校验 Redis 中值为 "refresh" 则删除，否则返回 0
+            // 并发的第二个 refresh 请求会在这里拿到 0，直接失败
+            Long revoked = redisTemplate.execute(
+                    VALIDATE_AND_REVOKE_SCRIPT,
+                    Collections.singletonList("jwt:token:" + username + ":" + refreshToken),
+                    TYPE_REFRESH
+            );
+            if (revoked == null || revoked == 0L) {
+                log.warn("Refresh token already revoked or invalid in Redis for user: {}", username);
+                return null;
+            }
 
             // 签发新的 token 对
             String newToken = generateToken(username);
@@ -204,6 +233,8 @@ public class JwtUtil {
                 .expiresIn(luminaProperties.getAuth().getJwt().getExpiration())
                 .username(username)
                 .build();
+        } catch (JwtException | IllegalArgumentException e) {
+            log.warn("Invalid refresh token: {}", e.getMessage());
         } catch (Exception e) {
             log.error("Error refreshing token: {}", e.getMessage());
         }
