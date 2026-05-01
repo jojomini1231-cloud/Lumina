@@ -37,7 +37,7 @@ public class JwtAuthenticationFilter implements WebFilter {
 
         String jwt = getJwtFromRequest(exchange);
 
-        if (StringUtils.hasText(jwt) && jwtUtil.validateToken(jwt)) {
+        if (StringUtils.hasText(jwt) && jwtUtil.validateAccessToken(jwt)) {
             String username = jwtUtil.getUsernameFromToken(jwt);
 
             return userDetailsService.findByUsername(username)

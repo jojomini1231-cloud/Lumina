@@ -53,26 +53,31 @@ public class JwtUtil {
         return signingKey;
     }
 
+    private static final String CLAIM_TYPE = "type";
+    private static final String TYPE_ACCESS = "access";
+    private static final String TYPE_REFRESH = "refresh";
+
     /**
-     * 生成 JWT Token
+     * 生成 Access Token
      */
     public String generateToken(String username) {
-        return generateToken(username, luminaProperties.getAuth().getJwt().getExpiration());
+        return generateToken(username, TYPE_ACCESS, luminaProperties.getAuth().getJwt().getExpiration());
     }
 
     /**
      * 生成 Refresh Token
      */
     public String generateRefreshToken(String username) {
-        return generateToken(username, luminaProperties.getAuth().getJwt().getRefreshExpiration());
+        return generateToken(username, TYPE_REFRESH, luminaProperties.getAuth().getJwt().getRefreshExpiration());
     }
 
-    private String generateToken(String username, long expirationMs) {
+    private String generateToken(String username, String type, long expirationMs) {
         Date now = new Date();
         Date expirationDate = new Date(now.getTime() + expirationMs);
 
         String token = Jwts.builder()
                 .setSubject(username)
+                .claim(CLAIM_TYPE, type)
                 .setIssuedAt(now)
                 .setExpiration(expirationDate)
                 .signWith(getSigningKey(), SignatureAlgorithm.HS512)
@@ -81,7 +86,7 @@ public class JwtUtil {
         // 将 token 存储到 Redis 中，用于后续的注销功能
         redisTemplate.opsForValue().set(
                 "jwt:token:" + username + ":" + token,
-                "valid",
+                type,
                 expirationMs,
                 TimeUnit.MILLISECONDS
         );
@@ -102,22 +107,42 @@ public class JwtUtil {
     }
 
     /**
-     * 验证 token 是否有效
+     * 验证 Access Token 是否有效（用于 API 请求鉴权）
      */
-    public boolean validateToken(String token) {
-        try {
-            String username = getUsernameFromToken(token);
+    public boolean validateAccessToken(String token) {
+        return validateToken(token, TYPE_ACCESS);
+    }
 
-            // 检查 token 是否存在于 Redis 中（用于注销验证）
-            String redisTokenStatus = redisTemplate.opsForValue().get("jwt:token:" + username + ":" + token);
-            if (redisTokenStatus == null || !redisTokenStatus.equals("valid")) {
+    /**
+     * 验证 Refresh Token 是否有效（用于刷新令牌）
+     */
+    public boolean validateRefreshToken(String token) {
+        return validateToken(token, TYPE_REFRESH);
+    }
+
+    private boolean validateToken(String token, String expectedType) {
+        try {
+            Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(getSigningKey())
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+
+            String username = claims.getSubject();
+            String tokenType = claims.get(CLAIM_TYPE, String.class);
+
+            // 校验 token 类型
+            if (!expectedType.equals(tokenType)) {
+                log.warn("Token type mismatch: expected={}, actual={}", expectedType, tokenType);
                 return false;
             }
 
-            Jwts.parserBuilder()
-                    .setSigningKey(getSigningKey())
-                    .build()
-                    .parseClaimsJws(token);
+            // 检查 token 是否存在于 Redis 中（用于注销验证）
+            String redisTokenType = redisTemplate.opsForValue().get("jwt:token:" + username + ":" + token);
+            if (redisTokenType == null || !redisTokenType.equals(expectedType)) {
+                return false;
+            }
+
             return true;
         } catch (JwtException | IllegalArgumentException e) {
             log.error("Invalid JWT token: {}", e.getMessage());
@@ -156,25 +181,29 @@ public class JwtUtil {
 
     /**
      * 刷新 token
+     * 先注销旧 refresh token，再签发新 token 对，防止旧 token 被重复使用
      */
     public LoginResponse refreshToken(String refreshToken) {
         try {
-            if (validateToken(refreshToken)) {
-                String username = getUsernameFromToken(refreshToken);
-                // 刷新时，生成一对新的 token 和 refresh token
-                String newToken = generateToken(username);
-                String newRefreshToken = generateRefreshToken(username);
-                
-                // 可选：注销旧的 refresh token
-                revokeToken(refreshToken);
-                
-                return LoginResponse.builder()
-                    .token(newToken)
-                    .refreshToken(newRefreshToken)
-                    .expiresIn(luminaProperties.getAuth().getJwt().getExpiration())
-                    .username(username)
-                    .build();
+            if (!validateRefreshToken(refreshToken)) {
+                return null;
             }
+
+            String username = getUsernameFromToken(refreshToken);
+
+            // 先注销旧的 refresh token，关闭竞态窗口
+            revokeToken(refreshToken);
+
+            // 签发新的 token 对
+            String newToken = generateToken(username);
+            String newRefreshToken = generateRefreshToken(username);
+
+            return LoginResponse.builder()
+                .token(newToken)
+                .refreshToken(newRefreshToken)
+                .expiresIn(luminaProperties.getAuth().getJwt().getExpiration())
+                .username(username)
+                .build();
         } catch (Exception e) {
             log.error("Error refreshing token: {}", e.getMessage());
         }
