@@ -11,6 +11,7 @@ import com.lumina.service.FailoverService;
 import com.lumina.service.GroupService;
 import com.lumina.service.LlmRequestExecutor;
 import com.lumina.service.RelayService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +24,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 public class RelayServiceImpl implements RelayService {
 
@@ -48,6 +50,7 @@ public class RelayServiceImpl implements RelayService {
     @Override
     public Mono<ResponseEntity<?>> relay(String type, ObjectNode params, Map<String, String> queryParams) {
         String modelGroupName = params.get("model").asText();
+        log.info("Relaying request for model group: {}", modelGroupName);
         return groupService.getModelGroupConfigAsync(modelGroupName)
                 .switchIfEmpty(Mono.error(new RuntimeException("模型分组不存在")))
                 .flatMap(modelGroupConfig -> {
