@@ -185,9 +185,13 @@ class HttpClient {
   }
 }
 
-// Export a singleton instance with default configuration
+// Export a singleton instance with default configuration.
+// 使用相对路径 baseURL:
+//   - 生产环境：前端由后端同源托管，直接命中 /api/v1/**，无跨域。
+//   - 开发环境：由 vite.config.ts 中的 proxy 把 /api 转发到后端，
+//     同样无跨域；如需自定义后端地址，使用 VITE_BACKEND_URL 环境变量。
 export const api = new HttpClient({
-  baseURL: 'http://127.0.0.1:8080/api/v1',
+  baseURL: '/api/v1',
 });
 
 export default HttpClient;
