@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.lumina.mapper.StatsDailyMapper">
+
+    <!-- upsert - MySQL -->
+    <insert id="upsert" databaseId="mysql">
+        INSERT INTO stats_daily (stat_date, provider_id, provider_name, model_name,
+                                 total_requests, success_count, total_input_tokens,
+                                 total_output_tokens, total_cost, total_latency_ms)
+        VALUES (#{statDate}, #{providerId}, #{providerName}, #{modelName},
+                #{requests}, #{successCount}, #{inputTokens},
+                #{outputTokens}, #{cost}, #{latencyMs})
+        ON DUPLICATE KEY UPDATE
+            total_requests = total_requests + VALUES(total_requests),
+            success_count = success_count + VALUES(success_count),
+            total_input_tokens = total_input_tokens + VALUES(total_input_tokens),
+            total_output_tokens = total_output_tokens + VALUES(total_output_tokens),
+            total_cost = total_cost + VALUES(total_cost),
+            total_latency_ms = total_latency_ms + VALUES(total_latency_ms),
+            provider_name = VALUES(provider_name),
+            updated_at = NOW()
+    </insert>
+
+    <!-- upsert - SQLite -->
+    <insert id="upsert" databaseId="sqlite">
+        INSERT INTO stats_daily (stat_date, provider_id, provider_name, model_name,
+                                 total_requests, success_count, total_input_tokens,
+                                 total_output_tokens, total_cost, total_latency_ms)
+        VALUES (#{statDate}, #{providerId}, #{providerName}, #{modelName},
+                #{requests}, #{successCount}, #{inputTokens},
+                #{outputTokens}, #{cost}, #{latencyMs})
+        ON CONFLICT(stat_date, provider_id, model_name) DO UPDATE SET
+            total_requests = total_requests + excluded.total_requests,
+            success_count = success_count + excluded.success_count,
+            total_input_tokens = total_input_tokens + excluded.total_input_tokens,
+            total_output_tokens = total_output_tokens + excluded.total_output_tokens,
+            total_cost = total_cost + excluded.total_cost,
+            total_latency_ms = total_latency_ms + excluded.total_latency_ms,
+            provider_name = excluded.provider_name,
+            updated_at = datetime('now')
+    </insert>
+
+    <!-- selectByDateRange - MySQL -->
+    <select id="selectByDateRange" resultType="com.lumina.entity.StatsDaily" databaseId="mysql">
+        SELECT stat_date,
+               SUM(total_requests) as total_requests,
+               SUM(success_count) as success_count,
+               SUM(total_input_tokens) as total_input_tokens,
+               SUM(total_output_tokens) as total_output_tokens,
+               SUM(total_cost) as total_cost,
+               SUM(total_latency_ms) as total_latency_ms
+        FROM stats_daily
+        WHERE stat_date &gt;= #{startDate} AND stat_date &lt;= #{endDate}
+        GROUP BY stat_date
+        ORDER BY stat_date
+    </select>
+
+    <!-- selectByDateRange - SQLite -->
+    <select id="selectByDateRange" resultType="com.lumina.entity.StatsDaily" databaseId="sqlite">
+        SELECT stat_date,
+               SUM(total_requests) as total_requests,
+               SUM(success_count) as success_count,
+               SUM(total_input_tokens) as total_input_tokens,
+               SUM(total_output_tokens) as total_output_tokens,
+               SUM(total_cost) as total_cost,
+               SUM(total_latency_ms) as total_latency_ms
+        FROM stats_daily
+        WHERE stat_date &gt;= #{startDate} AND stat_date &lt;= #{endDate}
+        GROUP BY stat_date
+        ORDER BY stat_date
+    </select>
+
+    <!-- selectProviderStats - MySQL -->
+    <select id="selectProviderStats" resultType="com.lumina.entity.StatsDaily" databaseId="mysql">
+        SELECT provider_id, provider_name,
+               SUM(total_requests) as total_requests,
+               SUM(success_count) as success_count,
+               SUM(total_input_tokens) as total_input_tokens,
+               SUM(total_output_tokens) as total_output_tokens,
+               SUM(total_cost) as total_cost,
+               SUM(total_latency_ms) as total_latency_ms
+        FROM stats_daily
+        WHERE provider_id IS NOT NULL
+        GROUP BY provider_id, provider_name
+        ORDER BY total_requests DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- selectProviderStats - SQLite -->
+    <select id="selectProviderStats" resultType="com.lumina.entity.StatsDaily" databaseId="sqlite">
+        SELECT provider_id, provider_name,
+               SUM(total_requests) as total_requests,
+               SUM(success_count) as success_count,
+               SUM(total_input_tokens) as total_input_tokens,
+               SUM(total_output_tokens) as total_output_tokens,
+               SUM(total_cost) as total_cost,
+               SUM(total_latency_ms) as total_latency_ms
+        FROM stats_daily
+        WHERE provider_id IS NOT NULL
+        GROUP BY provider_id, provider_name
+        ORDER BY total_requests DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- selectGlobalTotal - MySQL -->
+    <select id="selectGlobalTotal" resultType="com.lumina.entity.StatsDaily" databaseId="mysql">
+        SELECT SUM(total_requests) as total_requests,
+               SUM(success_count) as success_count,
+               SUM(total_input_tokens) as total_input_tokens,
+               SUM(total_output_tokens) as total_output_tokens,
+               SUM(total_cost) as total_cost,
+               SUM(total_latency_ms) as total_latency_ms
+        FROM stats_daily
+    </select>
+
+    <!-- selectGlobalTotal - SQLite -->
+    <select id="selectGlobalTotal" resultType="com.lumina.entity.StatsDaily" databaseId="sqlite">
+        SELECT SUM(total_requests) as total_requests,
+               SUM(success_count) as success_count,
+               SUM(total_input_tokens) as total_input_tokens,
+               SUM(total_output_tokens) as total_output_tokens,
+               SUM(total_cost) as total_cost,
+               SUM(total_latency_ms) as total_latency_ms
+        FROM stats_daily
+    </select>
+
+    <!-- selectGlobalByDate - MySQL -->
+    <select id="selectGlobalByDate" resultType="com.lumina.entity.StatsDaily" databaseId="mysql">
+        SELECT SUM(total_requests) as total_requests,
+               SUM(success_count) as success_count,
+               SUM(total_input_tokens) as total_input_tokens,
+               SUM(total_output_tokens) as total_output_tokens,
+               SUM(total_cost) as total_cost,
+               SUM(total_latency_ms) as total_latency_ms
+        FROM stats_daily
+        WHERE stat_date = #{statDate}
+    </select>
+
+    <!-- selectGlobalByDate - SQLite -->
+    <select id="selectGlobalByDate" resultType="com.lumina.entity.StatsDaily" databaseId="sqlite">
+        SELECT SUM(total_requests) as total_requests,
+               SUM(success_count) as success_count,
+               SUM(total_input_tokens) as total_input_tokens,
+               SUM(total_output_tokens) as total_output_tokens,
+               SUM(total_cost) as total_cost,
+               SUM(total_latency_ms) as total_latency_ms
+        FROM stats_daily
+        WHERE stat_date = #{statDate}
+    </select>
+
+    <delete id="deleteAll">
+        DELETE FROM stats_daily
+    </delete>
+</mapper>
