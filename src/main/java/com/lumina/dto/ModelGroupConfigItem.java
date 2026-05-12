@@ -20,6 +20,8 @@ public class ModelGroupConfigItem {
 
     private String baseUrl;
 
+    private Integer providerType;
+
     /**
      * Provider 级别熔断器配置覆盖
      * 优先级高于 Group 级别配置

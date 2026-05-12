@@ -45,20 +45,7 @@ spring:
     async:
       request-timeout: 600000 # 10分钟
 
-  # 服务器配置
-  server:
-    port: 8080
-    servlet:
-      context-path: /
-    tomcat:
-      uri-encoding: UTF-8
-      max-threads: 200
-      min-spare-threads: 10
-      accept-count: 100
-      max-connections: 8192
-    max-http-header-size: 8192
-
-  # Redis配置 (后续添加)
+  # Redis配置
   data:
     redis:
       host: localhost
@@ -80,6 +67,19 @@ spring:
       file-size-threshold: 0
       max-file-size: 10MB
       max-request-size: 10MB
+
+# 服务器配置
+server:
+  port: 8080
+  servlet:
+    context-path: /
+  tomcat:
+    uri-encoding: UTF-8
+    max-threads: 200
+    min-spare-threads: 10
+    accept-count: 100
+    max-connections: 8192
+  max-http-request-header-size: 8192
 
 # MyBatis Plus配置
 mybatis-plus:
@@ -126,9 +126,9 @@ management:
     health:
       show-details: always
       show-components: always
-  metrics:
-    export:
-      prometheus:
+  prometheus:
+    metrics:
+      export:
         enabled: true
 
 # 日志配置

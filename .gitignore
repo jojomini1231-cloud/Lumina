@@ -40,6 +40,9 @@ data
 
 **.text
 
+# API protocol reference files (for development only)
+src/main/resources/*_stream_api.txt
+
 # Local Spring Boot profile overrides
 src/main/resources/application-local.yml
 src/main/resources/application-local.yaml
