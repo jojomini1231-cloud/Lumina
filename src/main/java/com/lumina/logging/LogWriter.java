@@ -3,6 +3,7 @@ package com.lumina.logging;
 import com.lumina.config.LuminaProperties;
 import com.lumina.entity.RequestLog;
 import com.lumina.service.RequestLogService;
+import com.lumina.stats.StatsAccumulator;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -28,6 +29,7 @@ public class LogWriter {
     private final RequestLogService requestLogService;
     private final LuminaProperties.Logging loggingProperties;
     private final MeterRegistry meterRegistry;
+    private final StatsAccumulator statsAccumulator;
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
     private final LongAdder droppedLogs = new LongAdder();
     private final DistributionSummary batchSizeSummary;
@@ -35,10 +37,12 @@ public class LogWriter {
 
     private LinkedBlockingQueue<RequestLog> queue;
 
-    public LogWriter(RequestLogService requestLogService, LuminaProperties luminaProperties, MeterRegistry meterRegistry) {
+    public LogWriter(RequestLogService requestLogService, LuminaProperties luminaProperties,
+                     MeterRegistry meterRegistry, StatsAccumulator statsAccumulator) {
         this.requestLogService = requestLogService;
         this.loggingProperties = luminaProperties.getLogging();
         this.meterRegistry = meterRegistry;
+        this.statsAccumulator = statsAccumulator;
         this.batchSizeSummary = DistributionSummary.builder("lumina_log_batch_size")
                 .description("Number of request logs written in a batch")
                 .register(meterRegistry);
@@ -99,6 +103,7 @@ public class LogWriter {
 
         batchSizeSummary.record(batch.size());
         requestLogService.saveBatchLogs(batch);
+        statsAccumulator.accumulate(batch);
     }
 
     private RequestLog convert(RequestLogContext ctx) {
