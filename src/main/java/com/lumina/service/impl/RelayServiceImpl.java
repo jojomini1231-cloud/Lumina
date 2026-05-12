@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.lumina.converter.ProtocolConverter;
+import com.lumina.converter.ProtocolConverterRegistry;
+import com.lumina.converter.ProtocolType;
 import com.lumina.dto.ModelGroupConfig;
 import com.lumina.dto.ModelGroupConfigItem;
 import com.lumina.entity.Group;
@@ -15,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -23,6 +27,7 @@ import reactor.core.scheduler.Schedulers;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -39,6 +44,9 @@ public class RelayServiceImpl implements RelayService {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private ProtocolConverterRegistry converterRegistry;
 
     private LlmRequestExecutor getExecutor(String type) {
         return executors.stream()
@@ -60,21 +68,31 @@ public class RelayServiceImpl implements RelayService {
 
                     Integer timeoutMs = modelGroupConfig.getFirstTokenTimeout();
                     boolean stream = params.has("stream") && params.get("stream").asBoolean();
-                    LlmRequestExecutor executor = getExecutor(type);
+                    ProtocolType inboundType = ProtocolType.fromRequestType(type);
 
                     if (stream) {
                         Flux<?> body = failoverService.executeWithFailoverFlux(
                                 (provider) -> {
+                                    ProtocolType outboundType = ProtocolType.fromCode(provider.getProviderType());
+                                    Optional<ProtocolConverter> converter = converterRegistry.getConverter(inboundType, outboundType);
+
                                     ObjectNode requestParams = params.deepCopy();
                                     requestParams.put("model", provider.getModelName());
-                                    return executor.executeStream(
-                                            requestParams,
-                                            provider,
-                                            queryParams,
-                                            "",
-                                            type,
-                                            timeoutMs
+
+                                    ObjectNode finalRequest = converter.map(c -> c.convertRequest(requestParams)).orElse(requestParams);
+                                    // 有转换器时用 outbound 协议的 executor，无转换时用原始 inbound 的 executor
+                                    String executorType = converter.isPresent() ? outboundType.toRequestType() : type;
+                                    LlmRequestExecutor executor = getExecutor(executorType);
+
+                                    if (converter.isPresent()) {
+                                        log.info("协议转换 [{}→{}], 转换后请求: {}", inboundType, outboundType, finalRequest);
+                                    }
+
+                                    Flux<ServerSentEvent<String>> upstream = executor.executeStream(
+                                            finalRequest, provider, queryParams, "", executorType, timeoutMs
                                     );
+
+                                    return converter.map(c -> c.convertStreamResponse(upstream)).orElse(upstream);
                                 },
                                 modelGroupConfig,
                                 timeoutMs
@@ -87,16 +105,23 @@ public class RelayServiceImpl implements RelayService {
 
                     return failoverService.executeWithFailoverMono(
                             (provider) -> {
+                                ProtocolType outboundType = ProtocolType.fromCode(provider.getProviderType());
+                                Optional<ProtocolConverter> converter = converterRegistry.getConverter(inboundType, outboundType);
+
                                 ObjectNode requestParams = params.deepCopy();
                                 requestParams.put("model", provider.getModelName());
+
+                                ObjectNode finalRequest = converter.map(c -> c.convertRequest(requestParams)).orElse(requestParams);
+                                String executorType = converter.isPresent() ? outboundType.toRequestType() : type;
+                                LlmRequestExecutor executor = getExecutor(executorType);
+
+                                if (converter.isPresent()) {
+                                    log.info("协议转换 [{}→{}], 转换后请求: {}", inboundType, outboundType, finalRequest);
+                                }
+
                                 return executor.executeNormal(
-                                        requestParams,
-                                        provider,
-                                        queryParams,
-                                        "",
-                                        type,
-                                        timeoutMs
-                                );
+                                        finalRequest, provider, queryParams, "", executorType, timeoutMs
+                                ).map(resp -> converter.map(c -> c.convertResponse(resp)).orElse(resp));
                             },
                             modelGroupConfig,
                             timeoutMs

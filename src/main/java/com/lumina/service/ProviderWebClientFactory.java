@@ -1,5 +1,6 @@
 package com.lumina.service;
 
+import com.lumina.converter.ProtocolType;
 import com.lumina.dto.ModelGroupConfigItem;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
@@ -21,8 +22,8 @@ public class ProviderWebClientFactory {
     }
 
     public WebClient getClient(ModelGroupConfigItem provider) {
-        String authHeader = toAuthHeader(provider.getApiKey());
-        String key = provider.getBaseUrl() + "|" + authHeader;
+        ProtocolType protocolType = ProtocolType.fromCode(provider.getProviderType());
+        String key = provider.getBaseUrl() + "|" + provider.getApiKey() + "|" + protocolType.getCode();
 
         if (clients.size() >= MAX_CLIENTS && !clients.containsKey(key)) {
             clients.clear();
@@ -31,8 +32,15 @@ public class ProviderWebClientFactory {
         return clients.computeIfAbsent(key, ignored -> {
             WebClient.Builder builder = webClientBuilder.clone()
                     .baseUrl(provider.getBaseUrl());
-            if (StringUtils.hasText(authHeader)) {
-                builder.defaultHeader(HttpHeaders.AUTHORIZATION, authHeader);
+
+            if (StringUtils.hasText(provider.getApiKey())) {
+                if (protocolType == ProtocolType.ANTHROPIC) {
+                    builder.defaultHeader("x-api-key", provider.getApiKey());
+                    builder.defaultHeader("anthropic-version", "2023-06-01");
+                } else {
+                    String authHeader = toAuthHeader(provider.getApiKey());
+                    builder.defaultHeader(HttpHeaders.AUTHORIZATION, authHeader);
+                }
             }
             return builder.build();
         });
