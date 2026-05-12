@@ -8,6 +8,9 @@ mvnw.cmd
 logs
 .claude
 
+### Build artifacts ###
+*.jar
+
 ### STS ###
 .apt_generated
 .classpath
