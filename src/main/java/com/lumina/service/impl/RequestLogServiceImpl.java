@@ -112,4 +112,10 @@ public class RequestLogServiceImpl extends ServiceImpl<RequestLogMapper, Request
         }
         return (int) count;
     }
+
+    @Override
+    @Transactional
+    public int clearContentOlderThan(long timestamp) {
+        return this.baseMapper.clearContentBefore(timestamp);
+    }
 }

@@ -69,7 +69,8 @@ public class LuminaProperties {
     @Data
     public static class Stats {
         private int saveInterval = 5; // 分钟
-        private int logKeepDays = 7;
+        private int logKeepDays = 0; // 0 表示不删除日志
+        private int contentKeepDays = 3; // 请求/响应内容保留天数，超期置NULL
     }
 
     @Data
