@@ -2,8 +2,10 @@ package com.lumina.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.lumina.dto.ApiKeyUsageDto;
 import com.lumina.dto.ApiResponse;
 import com.lumina.entity.ApiKey;
+import com.lumina.mapper.ApiKeyMapper;
 import com.lumina.service.ApiKeyService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +19,9 @@ public class ApiKeyController {
 
     @Autowired
     private ApiKeyService apiKeyService;
+
+    @Autowired
+    private ApiKeyMapper apiKeyMapper;
 
     @GetMapping
     public ApiResponse<List<ApiKey>> getAllApiKeys() {
@@ -98,5 +103,20 @@ public class ApiKeyController {
             throw new IllegalArgumentException("ApiKey not found with key: " + apiKey);
         }
         return ApiResponse.success(key);
+    }
+
+    @GetMapping("/usage")
+    public ApiResponse<List<ApiKeyUsageDto>> getApiKeyUsageList() {
+        List<ApiKeyUsageDto> usageList = apiKeyMapper.selectApiKeyUsageList();
+        return ApiResponse.success(usageList);
+    }
+
+    @GetMapping("/usage/{apiKey}")
+    public ApiResponse<ApiKeyUsageDto> getApiKeyUsage(@PathVariable String apiKey) {
+        ApiKeyUsageDto usage = apiKeyMapper.selectApiKeyUsageByKey(apiKey);
+        if (usage == null) {
+            throw new IllegalArgumentException("ApiKey not found: " + apiKey);
+        }
+        return ApiResponse.success(usage);
     }
 }

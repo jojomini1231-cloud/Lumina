@@ -179,6 +179,7 @@ CREATE TABLE `request_logs` (
   `error_message` text COLLATE utf8mb4_unicode_ci COMMENT '错误信息',
   `error_stage` varchar(32) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'CONNECT / HTTP / DECODE / TIMEOUT',
   `retry_count` int DEFAULT '0' COMMENT '故障转移次数',
+  `api_key` varchar(255) DEFAULT NULL COMMENT '客户端API密钥',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   KEY `idx_request_time` (`request_time`),
@@ -186,7 +187,8 @@ CREATE TABLE `request_logs` (
   KEY `idx_request_model` (`request_model_name`),
   KEY `idx_request_id` (`request_id`),
   KEY `idx_provider` (`provider_id`),
-  KEY `idx_time` (`request_time`)
+  KEY `idx_time` (`request_time`),
+  KEY `idx_api_key` (`api_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='请求日志表';
 
 -- ----------------------------

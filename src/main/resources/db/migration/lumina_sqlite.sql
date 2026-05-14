@@ -156,6 +156,7 @@ CREATE TABLE IF NOT EXISTS `request_logs` (
   `error_message` TEXT,
   `error_stage` TEXT,
   `retry_count` INTEGER DEFAULT 0,
+  `api_key` TEXT DEFAULT NULL,
   `created_at` DATETIME DEFAULT (datetime('now'))
 );
 
@@ -163,6 +164,7 @@ CREATE INDEX IF NOT EXISTS `idx_request_logs_request_time` ON `request_logs` (`r
 CREATE INDEX IF NOT EXISTS `idx_request_logs_provider_id` ON `request_logs` (`provider_id`);
 CREATE INDEX IF NOT EXISTS `idx_request_logs_request_model` ON `request_logs` (`request_model_name`);
 CREATE INDEX IF NOT EXISTS `idx_request_logs_request_id` ON `request_logs` (`request_id`);
+CREATE INDEX IF NOT EXISTS `idx_request_logs_api_key` ON `request_logs` (`api_key`);
 
 -- ----------------------------
 -- Table structure for settings
