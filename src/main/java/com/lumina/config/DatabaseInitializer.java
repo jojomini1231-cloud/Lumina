@@ -41,7 +41,8 @@ public class DatabaseInitializer implements CommandLineRunner {
             initializeSQLiteDatabase();
             runMigrations();
         } else {
-            log.info("Using MySQL database, skipping auto-initialization");
+            log.info("Using MySQL database, running migrations...");
+            runMigrations();
         }
     }
 
@@ -159,9 +160,26 @@ public class DatabaseInitializer implements CommandLineRunner {
                 new org.springframework.core.io.support.PathMatchingResourcePatternResolver()
                     .getResources("classpath:db/migration/V*.sql");
 
+            // 按数据库类型过滤：MySQL 跳过 _sqlite 文件；SQLite 优先用 _sqlite 文件
+            java.util.Set<Integer> sqliteVersions = new java.util.HashSet<>();
+            for (org.springframework.core.io.Resource r : resources) {
+                String fn = r.getFilename();
+                if (fn != null && fn.contains("_sqlite")) {
+                    sqliteVersions.add(Integer.parseInt(fn.substring(1, fn.indexOf("__"))));
+                }
+            }
+
             for (org.springframework.core.io.Resource resource : resources) {
                 String filename = resource.getFilename();
                 if (filename == null) continue;
+
+                boolean isSqliteFile = filename.contains("_sqlite");
+                if (!DataSourceConfig.isSQLite() && isSqliteFile) continue;
+                if (DataSourceConfig.isSQLite()) {
+                    int ver = Integer.parseInt(filename.substring(1, filename.indexOf("__")));
+                    // 如果有 _sqlite 变体，跳过非 _sqlite 文件
+                    if (!isSqliteFile && sqliteVersions.contains(ver)) continue;
+                }
 
                 // 从文件名提取版本号 (V001__xxx.sql -> 1)
                 String versionStr = filename.substring(1, filename.indexOf("__"));
@@ -194,13 +212,23 @@ public class DatabaseInitializer implements CommandLineRunner {
         } catch (Exception e) {
             // 表不存在，创建它
             log.info("Creating migration_records table");
-            jdbcTemplate.execute(
-                "CREATE TABLE IF NOT EXISTS migration_records (" +
-                "  version INTEGER PRIMARY KEY," +
-                "  status INTEGER NOT NULL," +
-                "  executed_at DATETIME NOT NULL DEFAULT (datetime('now'))" +
-                ")"
-            );
+            if (DataSourceConfig.isSQLite()) {
+                jdbcTemplate.execute(
+                    "CREATE TABLE IF NOT EXISTS migration_records (" +
+                    "  version INTEGER PRIMARY KEY," +
+                    "  status INTEGER NOT NULL," +
+                    "  executed_at DATETIME NOT NULL DEFAULT (datetime('now'))" +
+                    ")"
+                );
+            } else {
+                jdbcTemplate.execute(
+                    "CREATE TABLE IF NOT EXISTS migration_records (" +
+                    "  version INT PRIMARY KEY," +
+                    "  status INT NOT NULL," +
+                    "  executed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP" +
+                    ")"
+                );
+            }
         }
     }
 
@@ -224,10 +252,17 @@ public class DatabaseInitializer implements CommandLineRunner {
      * 记录迁移执行
      */
     private void recordMigration(int version) {
-        jdbcTemplate.update(
-            "INSERT INTO migration_records (version, status, executed_at) VALUES (?, 1, datetime('now'))",
-            version
-        );
+        if (DataSourceConfig.isSQLite()) {
+            jdbcTemplate.update(
+                "INSERT INTO migration_records (version, status, executed_at) VALUES (?, 1, datetime('now'))",
+                version
+            );
+        } else {
+            jdbcTemplate.update(
+                "INSERT INTO migration_records (version, status, executed_at) VALUES (?, 1, NOW())",
+                version
+            );
+        }
     }
 
     /**
@@ -257,8 +292,12 @@ public class DatabaseInitializer implements CommandLineRunner {
                             jdbcTemplate.execute(sql);
                             log.debug("Executed: {}", sql.substring(0, Math.min(100, sql.length())));
                         } catch (Exception e) {
-                            log.error("Failed to execute SQL: {}", sql);
-                            throw e;
+                            if (isDuplicateError(e)) {
+                                log.warn("Migration SQL skipped (already applied): {}", sql.substring(0, Math.min(80, sql.length())));
+                            } else {
+                                log.error("Failed to execute SQL: {}", sql);
+                                throw e;
+                            }
                         }
                     }
                     sqlBuilder = new StringBuilder();
@@ -271,5 +310,24 @@ public class DatabaseInitializer implements CommandLineRunner {
                 jdbcTemplate.execute(remainingSql);
             }
         }
+    }
+
+    /**
+     * 判断异常是否为"已存在"类错误（列已存在、索引已存在等），遍历整个 cause 链
+     */
+    private boolean isDuplicateError(Throwable e) {
+        Throwable current = e;
+        while (current != null) {
+            String msg = current.getMessage();
+            if (msg != null) {
+                String lower = msg.toLowerCase();
+                if (lower.contains("duplicate column") || lower.contains("duplicate key name")
+                        || lower.contains("already exists")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }
