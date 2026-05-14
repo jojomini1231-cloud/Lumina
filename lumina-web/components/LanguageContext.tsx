@@ -41,6 +41,7 @@ const translations = {
       groups: '分组管理',
       pricing: '价格管理',
       logs: '日志系统',
+      tokens: '令牌管理',
       settings: '设置中心',
       systemHealthy: '系统正常',
     },
@@ -421,7 +422,14 @@ const translations = {
         confirmRevokeShort: '确认撤销？',
         revokeSuccess: '令牌已成功撤销',
         copyWarning: '请务必立即复制此令牌。出于安全原因，它将不会再次显示。',
-        confirmRevoke: '确定要撤销此令牌吗？任何使用此令牌的应用程序将立即无法访问。'
+        confirmRevoke: '确定要撤销此令牌吗？任何使用此令牌的应用程序将立即无法访问。',
+        requests: '请求数',
+        inputTokens: '输入',
+        outputTokens: '输出',
+        cost: '费用',
+        expires: '过期时间',
+        neverExpires: '永不过期',
+        expired: '已过期'
       },
       circuitBreaker: {
         title: '熔断器管控',
@@ -547,6 +555,7 @@ const translations = {
       groups: 'Groups',
       pricing: 'Pricing',
       logs: 'Logs',
+      tokens: 'Tokens',
       settings: 'Settings',
       systemHealthy: 'System Healthy',
     },
@@ -926,8 +935,15 @@ const translations = {
         activeTokens: 'Active Tokens',
         confirmRevokeShort: 'Confirm Revoke?',
         revokeSuccess: 'Token revoked successfully',
-        copyWarning: 'Make sure to copy this token now. You won’t be able to see it again!',
-        confirmRevoke: 'Are you sure you want to revoke this token? Any applications using it will lose access immediately.'
+        copyWarning: "Make sure to copy this token now. You won't be able to see it again!",
+        confirmRevoke: 'Are you sure you want to revoke this token? Any applications using it will lose access immediately.',
+        requests: 'Requests',
+        inputTokens: 'Input',
+        outputTokens: 'Output',
+        cost: 'Cost',
+        expires: 'Expires',
+        neverExpires: 'Never',
+        expired: 'Expired'
       },
       circuitBreaker: {
         title: 'Circuit Breaker Management',

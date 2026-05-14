@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
-import { 
-  LayoutDashboard, 
-  Network, 
-  Layers, 
-  DollarSign, 
-  ScrollText, 
-  Settings, 
-  Menu, 
+import {
+  LayoutDashboard,
+  Network,
+  Layers,
+  DollarSign,
+  ScrollText,
+  Settings,
+  Menu,
   X,
   Zap,
-  LogOut
+  LogOut,
+  KeyRound
 } from 'lucide-react';
 import { ViewState } from '../types';
 import { useLanguage } from './LanguageContext';
@@ -34,6 +35,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onChangeView, child
     { id: 'groups' as ViewState, label: t('nav.groups'), icon: Layers },
     { id: 'pricing' as ViewState, label: t('nav.pricing'), icon: DollarSign },
     { id: 'logs' as ViewState, label: t('nav.logs'), icon: ScrollText },
+    { id: 'tokens' as ViewState, label: t('nav.tokens'), icon: KeyRound },
     { id: 'settings' as ViewState, label: t('nav.settings'), icon: Settings },
   ];
 

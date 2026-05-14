@@ -77,6 +77,12 @@ export interface AccessToken {
   lastUsedAt?: string;
   createdAt: string;
   status: 'active' | 'revoked';
+  expiredAt?: number | null; // Unix timestamp in seconds, null = never expires
+  totalRequests?: number;
+  successRequests?: number;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalCost?: number;
 }
 
 export interface DashboardOverview {
@@ -92,7 +98,7 @@ export interface DashboardOverview {
     successRateChange: number;
 }
 
-export type ViewState = 'dashboard' | 'providers' | 'groups' | 'pricing' | 'logs' | 'settings';
+export type ViewState = 'dashboard' | 'providers' | 'groups' | 'pricing' | 'logs' | 'tokens' | 'settings';
 
 // Auth Types
 

@@ -6,6 +6,7 @@ import { Groups } from './components/Groups';
 import { Settings } from './components/Settings';
 import { Logs } from './components/Logs';
 import { Pricing } from './components/Pricing';
+import { Tokens } from './components/Tokens';
 import { Login } from './components/Login';
 import { AuthProvider, useAuth } from './components/AuthContext';
 import { ViewState } from './types';
@@ -42,6 +43,8 @@ const AppContent: React.FC = () => {
         return <Pricing />;
       case 'logs':
         return <Logs />;
+      case 'tokens':
+        return <Tokens />;
       case 'settings':
         return <Settings />;
       default:
