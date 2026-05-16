@@ -9,10 +9,11 @@
                      mgi.group_id,
                      ROW_NUMBER() OVER (
             PARTITION BY lm.model_name
-            ORDER BY lm.output_price DESC
+            ORDER BY lm.is_active DESC, lm.output_price DESC
         ) AS rn
               FROM llm_models lm
                        JOIN model_group_items mgi ON lm.model_name = mgi.model_name
+              WHERE lm.is_active = 1
               ${ew.customSqlSegment}
               ) t
         WHERE t.rn = 1

@@ -21,6 +21,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class LlmModelServiceImpl extends ServiceImpl<LlmModelMapper, LlmModel> implements LlmModelService {
@@ -46,18 +48,30 @@ public class LlmModelServiceImpl extends ServiceImpl<LlmModelMapper, LlmModel> i
             return;
         }
 
-        // Use a map to deduplicate by model name
-        List<LlmModel> models = new ArrayList<>();
+        // Use a map to deduplicate by (model_name, provider)
+        Map<String, LlmModel> modelMap = new java.util.LinkedHashMap<>();
         LocalDateTime now = LocalDateTime.now();
 
         for (Map.Entry<String, ModelDevDTO> provider : response.entrySet()) {
             if (provider.getValue().getModels() != null) {
                 for (ModelDevDTO.ModelData modelData : provider.getValue().getModels().values()) {
+                    String dedupeKey = modelData.getId() + "|" + provider.getKey();
+                    if (modelMap.containsKey(dedupeKey)) {
+                        continue; // skip duplicate
+                    }
                     LlmModel model = new LlmModel();
                     model.setModelName(modelData.getId());
                     model.setProvider(provider.getKey());
+                    model.setDisplayName(modelData.getName());
+                    model.setFamily(modelData.getFamily());
                     model.setIsReasoning(modelData.getReasoning());
                     model.setIsToolCall(modelData.getTool_call());
+                    model.setIsAttachment(modelData.getAttachment());
+                    model.setIsStructuredOutput(modelData.getStructured_output());
+                    model.setIsTemperature(modelData.getTemperature());
+                    model.setIsOpenWeights(modelData.getOpen_weights());
+                    model.setKnowledgeCutoff(modelData.getKnowledge());
+                    model.setReleaseDate(modelData.getRelease_date());
 
                     if (modelData.getCost() != null) {
                         model.setInputPrice(modelData.getCost().getInput());
@@ -68,24 +82,76 @@ public class LlmModelServiceImpl extends ServiceImpl<LlmModelMapper, LlmModel> i
                     if (modelData.getLimit() != null) {
                         model.setContextLimit(modelData.getLimit().getContext());
                         model.setOutputLimit(modelData.getLimit().getOutput());
+                        model.setInputLimit(modelData.getLimit().getInput());
                     }
-                    if (modelData.getModalities() != null){
-                        model.setInputType(String.join(",", modelData.getModalities().getInput()));
+                    if (modelData.getModalities() != null) {
+                        if (modelData.getModalities().getInput() != null) {
+                            model.setInputType(String.join(",", modelData.getModalities().getInput()));
+                        }
+                        if (modelData.getModalities().getOutput() != null) {
+                            model.setOutputType(String.join(",", modelData.getModalities().getOutput()));
+                        }
                     }
 
                     model.setLastUpdatedAt(modelData.getLast_updated());
                     model.setCreatedAt(now);
                     model.setUpdatedAt(now);
 
-                    models.add(model);
+                    modelMap.put(dedupeKey, model);
                 }
             }
         }
 
+        List<LlmModel> models = new ArrayList<>(modelMap.values());
+
         if (!models.isEmpty()) {
             transactionTemplate.executeWithoutResult(status -> {
-                // Upsert new models based on model_name
-                this.saveOrUpdateBatch(models);
+                // Get existing model_name+provider combinations to determine which are new
+                Set<String> existingKeys = this.list(new LambdaQueryWrapper<LlmModel>()
+                        .select(LlmModel::getModelName, LlmModel::getProvider))
+                        .stream()
+                        .map(m -> m.getModelName() + "|" + m.getProvider())
+                        .collect(Collectors.toSet());
+
+                List<LlmModel> toInsert = new ArrayList<>();
+                List<LlmModel> toUpdate = new ArrayList<>();
+
+                for (LlmModel m : models) {
+                    String key = m.getModelName() + "|" + m.getProvider();
+                    if (existingKeys.contains(key)) {
+                        // Find existing record and set its id for update
+                        LlmModel existing = this.getOne(new LambdaQueryWrapper<LlmModel>()
+                                .eq(LlmModel::getModelName, m.getModelName())
+                                .eq(LlmModel::getProvider, m.getProvider()));
+                        if (existing != null) {
+                            m.setId(existing.getId());
+                            m.setIsActive(existing.getIsActive()); // preserve active flag
+                            m.setCreatedAt(existing.getCreatedAt());
+                            toUpdate.add(m);
+                        }
+                    } else {
+                        // New record, default is_active = false (user must explicitly select)
+                        m.setIsActive(false);
+                        toInsert.add(m);
+                    }
+                }
+
+                if (!toInsert.isEmpty()) {
+                    this.saveBatch(toInsert);
+                    // Auto-activate if this model_name has no active record yet
+                    for (LlmModel m : toInsert) {
+                        long activeCount = this.count(new LambdaQueryWrapper<LlmModel>()
+                                .eq(LlmModel::getModelName, m.getModelName())
+                                .eq(LlmModel::getIsActive, true));
+                        if (activeCount == 0) {
+                            m.setIsActive(true);
+                            this.updateById(m);
+                        }
+                    }
+                }
+                if (!toUpdate.isEmpty()) {
+                    this.updateBatchById(toUpdate);
+                }
             });
             hotPathCacheService.invalidateAllModelPrices();
         }
@@ -100,8 +166,34 @@ public class LlmModelServiceImpl extends ServiceImpl<LlmModelMapper, LlmModel> i
     public LlmModel findLatestByModelName(String modelName) {
         return hotPathCacheService.getModelPrice(modelName, () -> this.getOne(new LambdaQueryWrapper<LlmModel>()
                 .eq(LlmModel::getModelName, modelName)
-                .orderByDesc(LlmModel::getInputPrice)
+                .eq(LlmModel::getIsActive, true)
                 .last("limit 1")));
+    }
+
+    @Override
+    public void setActiveProvider(String modelName, String provider) {
+        transactionTemplate.executeWithoutResult(status -> {
+            // Deactivate all records for this model
+            LlmModel deactivate = new LlmModel();
+            deactivate.setIsActive(false);
+            this.update(deactivate, new LambdaQueryWrapper<LlmModel>()
+                    .eq(LlmModel::getModelName, modelName));
+
+            // Activate the selected provider
+            LlmModel activate = new LlmModel();
+            activate.setIsActive(true);
+            this.update(activate, new LambdaQueryWrapper<LlmModel>()
+                    .eq(LlmModel::getModelName, modelName)
+                    .eq(LlmModel::getProvider, provider));
+        });
+        hotPathCacheService.invalidateModelPrice(modelName);
+    }
+
+    @Override
+    public List<LlmModel> findProvidersByModelName(String modelName) {
+        return this.list(new LambdaQueryWrapper<LlmModel>()
+                .eq(LlmModel::getModelName, modelName)
+                .orderByDesc(LlmModel::getIsActive));
     }
 
     @Override

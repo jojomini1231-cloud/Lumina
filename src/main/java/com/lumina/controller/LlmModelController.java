@@ -85,4 +85,16 @@ public class LlmModelController {
         return ApiResponse.success(null);
     }
 
+    @GetMapping("/{modelName}/providers")
+    public ApiResponse<List<LlmModel>> getModelProviders(@PathVariable String modelName) {
+        List<LlmModel> providers = llmModelService.findProvidersByModelName(modelName);
+        return ApiResponse.success(providers);
+    }
+
+    @PutMapping("/{modelName}/active-provider")
+    public ApiResponse<Void> setActiveProvider(@PathVariable String modelName, @RequestParam String provider) {
+        llmModelService.setActiveProvider(modelName, provider);
+        return ApiResponse.success(null);
+    }
+
 }
