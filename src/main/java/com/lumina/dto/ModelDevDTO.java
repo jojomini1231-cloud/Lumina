@@ -20,8 +20,14 @@ public class ModelDevDTO {
         private String id;
         private String name;
         private String family;
+        private Boolean attachment;
         private Boolean reasoning;
         private Boolean tool_call;
+        private Boolean structured_output;
+        private Boolean temperature;
+        private String knowledge;
+        private String release_date;
+        private Boolean open_weights;
         private CostData cost;
         private ModelLimit limit;
         private Modalities modalities;
@@ -42,11 +48,13 @@ public class ModelDevDTO {
     public static class ModelLimit {
         private Integer context;
         private Integer output;
+        private Integer input;
     }
 
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Modalities {
         private List<String> input;
+        private List<String> output;
     }
 }
