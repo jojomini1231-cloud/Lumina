@@ -55,17 +55,29 @@ export interface LogEntry {
 }
 
 export interface ModelPrice {
+  id?: number;
   modelName: string;
+  displayName?: string;
   provider: string;
+  family?: string;
   inputPrice: number;
   outputPrice: number;
   cacheReadPrice?: number | null;
   cacheWritePrice?: number | null;
   contextLimit: number;
   outputLimit: number;
+  inputLimit?: number | null;
   isReasoning: boolean;
   isToolCall: boolean;
+  isAttachment?: boolean;
+  isStructuredOutput?: boolean;
+  isTemperature?: boolean;
+  isOpenWeights?: boolean;
   inputType: string;
+  outputType?: string;
+  knowledgeCutoff?: string;
+  releaseDate?: string;
+  isActive?: boolean;
   lastUpdatedAt: string;
 }
 

@@ -35,5 +35,22 @@ export const modelService = {
   async sync(): Promise<boolean> {
       const response = await api.post<any>('/llm-models/sync');
       return response.code === 200;
+  },
+
+  // Get all upstream providers for a model
+  async getProviders(modelName: string): Promise<ModelPrice[]> {
+      const response = await api.get<any>(`/llm-models/${encodeURIComponent(modelName)}/providers`);
+      if (response.code === 200 && response.data) {
+          return response.data;
+      }
+      return [];
+  },
+
+  // Set active upstream provider for a model
+  async setActiveProvider(modelName: string, provider: string): Promise<boolean> {
+      const response = await api.put<any>(`/llm-models/${encodeURIComponent(modelName)}/active-provider`, null, {
+          params: { provider }
+      });
+      return response.code === 200;
   }
 };

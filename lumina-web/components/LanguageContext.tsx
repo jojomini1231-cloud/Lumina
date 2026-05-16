@@ -308,6 +308,9 @@ const translations = {
       sync: '同步上游模型',
       syncSuccess: '模型同步成功',
       syncFail: '模型同步失败',
+      selectProvider: '切换上游供应商',
+      providerChanged: '已切换上游供应商',
+      providerChangeFail: '切换失败',
       noModels: '未找到模型',
       adjustSearch: '请尝试调整搜索条件',
       table: {
@@ -322,7 +325,9 @@ const translations = {
       },
       capabilities: {
         reasoning: '推理',
-        toolCall: '工具调用'
+        toolCall: '工具调用',
+        attachment: '附件支持',
+        structuredOutput: '结构化输出'
       }
     },
     logs: {
@@ -822,6 +827,9 @@ const translations = {
       sync: 'Sync Upstream Models',
       syncSuccess: 'Models synced successfully',
       syncFail: 'Failed to sync models',
+      selectProvider: 'Switch upstream provider',
+      providerChanged: 'Upstream provider switched',
+      providerChangeFail: 'Failed to switch provider',
       noModels: 'No models found',
       adjustSearch: 'Try adjusting your search criteria',
       table: {
@@ -836,7 +844,9 @@ const translations = {
       },
       capabilities: {
         reasoning: 'Reasoning',
-        toolCall: 'Tool Call'
+        toolCall: 'Tool Call',
+        attachment: 'Attachment',
+        structuredOutput: 'Structured Output'
       }
     },
     logs: {

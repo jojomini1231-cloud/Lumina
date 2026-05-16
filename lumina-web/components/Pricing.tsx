@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, BrainCircuit, Wrench, RefreshCw, Database, Cpu, Calendar, Tag } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, BrainCircuit, Wrench, RefreshCw, Database, Cpu, Calendar, Tag, Paperclip, Braces, BookOpen, ChevronDown } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
 import { modelService } from '../services/modelService';
 import { ModelPrice } from '../types';
@@ -82,6 +82,49 @@ export const Pricing: React.FC = () => {
     return `$${price.toFixed(2)}`;
   };
 
+  // Provider selector state
+  const [providerDropdown, setProviderDropdown] = useState<{ modelName: string; providers: ModelPrice[] } | null>(null);
+  const [loadingProviders, setLoadingProviders] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleProviderClick = async (modelName: string) => {
+    if (providerDropdown?.modelName === modelName) {
+      setProviderDropdown(null);
+      return;
+    }
+    setLoadingProviders(true);
+    try {
+      const providers = await modelService.getProviders(modelName);
+      setProviderDropdown({ modelName, providers });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingProviders(false);
+    }
+  };
+
+  const handleSelectProvider = async (modelName: string, provider: string) => {
+    try {
+      await modelService.setActiveProvider(modelName, provider);
+      showToast(t('pricing.providerChanged'), 'success');
+      setProviderDropdown(null);
+      fetchModels(pagination.current, pagination.size, searchTerm);
+    } catch (e) {
+      showToast(t('pricing.providerChangeFail'), 'error');
+    }
+  };
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setProviderDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   return (
     <div className="space-y-6 relative flex flex-col h-full">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -152,10 +195,39 @@ export const Pricing: React.FC = () => {
                                 <div className="flex justify-between items-start mb-4">
                                     <div className="flex-1 pr-2">
                                         <h3 className="font-bold text-gray-900 dark:text-white text-lg leading-tight break-words" title={model.modelName}>
-                                            {model.modelName}
+                                            {model.displayName || model.modelName}
                                         </h3>
-                                        <div className="mt-3 flex items-center gap-2">
-                                            <Badge tone="neutral" size="xs">{model.provider}</Badge>
+                                        {model.displayName && (
+                                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono truncate" title={model.modelName}>{model.modelName}</p>
+                                        )}
+                                        <div className="mt-3 flex items-center gap-2 flex-wrap">
+                                            <div className="relative" ref={providerDropdown?.modelName === model.modelName ? dropdownRef : undefined}>
+                                                <button
+                                                    onClick={() => handleProviderClick(model.modelName)}
+                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                                                    title={t('pricing.selectProvider')}
+                                                >
+                                                    {model.provider}
+                                                    <ChevronDown size={10} />
+                                                </button>
+                                                {providerDropdown?.modelName === model.modelName && (
+                                                    <div className="absolute top-full left-0 mt-1 z-50 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[180px] max-h-[200px] overflow-y-auto">
+                                                        {loadingProviders ? (
+                                                            <div className="px-3 py-2 text-xs text-gray-400">Loading...</div>
+                                                        ) : providerDropdown.providers.map((p) => (
+                                                            <button
+                                                                key={p.provider}
+                                                                onClick={() => handleSelectProvider(model.modelName, p.provider)}
+                                                                className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 flex justify-between items-center ${p.isActive ? 'text-indigo-600 dark:text-indigo-400 font-semibold bg-indigo-50 dark:bg-indigo-900/20' : 'text-gray-700 dark:text-gray-300'}`}
+                                                            >
+                                                                <span>{p.provider}</span>
+                                                                <span className="font-mono text-gray-400">${p.inputPrice}/{p.outputPrice}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {model.family && <Badge tone="neutral" size="xs">{model.family}</Badge>}
                                             {/* Capabilities Icons */}
                                             <div className="flex gap-1.5">
                                                 {model.isReasoning && (
@@ -166,6 +238,16 @@ export const Pricing: React.FC = () => {
                                                 {model.isToolCall && (
                                                     <div className="p-1 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded text-blue-600 dark:text-blue-400" title={t('pricing.capabilities.toolCall')}>
                                                         <Wrench size={12} />
+                                                    </div>
+                                                )}
+                                                {model.isAttachment && (
+                                                    <div className="p-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded text-amber-600 dark:text-amber-400" title={t('pricing.capabilities.attachment')}>
+                                                        <Paperclip size={12} />
+                                                    </div>
+                                                )}
+                                                {model.isStructuredOutput && (
+                                                    <div className="p-1 bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded text-green-600 dark:text-green-400" title={t('pricing.capabilities.structuredOutput')}>
+                                                        <Braces size={12} />
                                                     </div>
                                                 )}
                                             </div>
@@ -223,9 +305,15 @@ export const Pricing: React.FC = () => {
                             
                             {/* Footer */}
                             <div className="bg-gray-50 dark:bg-[#151515] px-5 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center text-xs text-gray-400 font-medium">
-                                <div className="flex items-center">
+                                {model.knowledgeCutoff && (
+                                    <div className="flex items-center" title="Knowledge Cutoff">
+                                        <BookOpen size={12} className="mr-1.5" />
+                                        <span>{model.knowledgeCutoff}</span>
+                                    </div>
+                                )}
+                                <div className="flex items-center ml-auto">
                                     <Calendar size={12} className="mr-1.5" />
-                                    <span>{model.lastUpdatedAt}</span>
+                                    <span>{model.releaseDate || model.lastUpdatedAt}</span>
                                 </div>
                             </div>
                         </div>
