@@ -79,6 +79,26 @@ export const tokenService = {
     throw new Error(response.message || 'Failed to create token');
   },
 
+  // Toggle enable/disable a token
+  async toggle(id: string): Promise<AccessToken> {
+    const response = await api.put<any>(`/api-keys/${id}/toggle`);
+    if (response.code === 200 && response.data) {
+      const item = response.data as ApiKeyDTO;
+      return {
+        id: String(item.id),
+        name: item.name,
+        token: item.apiKey,
+        maskedToken: item.apiKey
+          ? `${item.apiKey.substring(0, 3)}...${item.apiKey.substring(item.apiKey.length - 4)}`
+          : '******',
+        createdAt: item.createdAt,
+        status: item.isEnabled ? 'active' : 'revoked',
+        expiredAt: item.expiredAt,
+      };
+    }
+    throw new Error(response.message || 'Failed to toggle token');
+  },
+
   // Delete/Revoke a token
   async delete(id: string): Promise<void> {
     const response = await api.delete<any>(`/api-keys/${id}`);

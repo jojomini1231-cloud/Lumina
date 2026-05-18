@@ -113,6 +113,18 @@ public class ApiKeyController {
         return ApiResponse.success(key);
     }
 
+    @PutMapping("/{id}/toggle")
+    public ApiResponse<ApiKey> toggleApiKey(@PathVariable Long id) {
+        ApiKey apiKey = apiKeyService.getById(id);
+        if (apiKey == null) {
+            throw new IllegalArgumentException("ApiKey not found with id: " + id);
+        }
+        apiKey.setIsEnabled(!apiKey.getIsEnabled());
+        apiKey.setUpdatedAt(LocalDateTime.now());
+        apiKeyService.updateById(apiKey);
+        return ApiResponse.success(apiKey);
+    }
+
     @GetMapping("/usage")
     public ApiResponse<List<ApiKeyUsageDto>> getApiKeyUsageList() {
         List<ApiKeyUsageDto> usageList = apiKeyMapper.selectApiKeyUsageList();
