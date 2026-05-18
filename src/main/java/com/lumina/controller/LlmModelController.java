@@ -6,6 +6,7 @@ import com.lumina.dto.ApiResponse;
 import com.lumina.entity.LlmModel;
 import com.lumina.service.LlmModelService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -69,12 +70,14 @@ public class LlmModelController {
     public ApiResponse<Page<LlmModel>> getLlmModelsByPage(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size,
-            String modelName) {
-        LambdaQueryWrapper<LlmModel> queryWrapper = new LambdaQueryWrapper<LlmModel>()
-                .orderByDesc(LlmModel::getLastUpdatedAt);
-        if (modelName != null) {
-            queryWrapper.like(LlmModel::getModelName, modelName);
-        }
+            @RequestParam(required = false) String modelName,
+            @RequestParam(required = false) String provider,
+            @RequestParam(required = false) Boolean isActive) {
+        LambdaQueryWrapper<LlmModel> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.like(StringUtils.hasText(modelName), LlmModel::getModelName, modelName);
+        queryWrapper.like(StringUtils.hasText(provider), LlmModel::getProvider, provider);
+        queryWrapper.eq(isActive != null, LlmModel::getIsActive, isActive);
+        queryWrapper.orderByDesc(LlmModel::getLastUpdatedAt);
         Page<LlmModel> page = llmModelService.queryPage(new Page<>(current, size), queryWrapper);
         return ApiResponse.success(page);
     }

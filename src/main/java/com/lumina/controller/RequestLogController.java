@@ -8,6 +8,7 @@ import com.lumina.dto.RequestLogPayloadDto;
 import com.lumina.entity.RequestLog;
 import com.lumina.service.RequestLogService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -23,13 +24,25 @@ public class RequestLogController {
     @GetMapping("/page")
     public ApiResponse<Page<RequestLog>> getRequestLogsByPage(
             @RequestParam(defaultValue = "1") Integer current,
-            @RequestParam(defaultValue = "10") Integer size) {
-        Page<RequestLog> page = requestLogService.page(new Page<>(current, size),
-                new LambdaQueryWrapper<RequestLog>()
-                        .select(RequestLog::getId, RequestLog::getRequestTime,RequestLog::getStatus,RequestLog::getProviderName,
-                                RequestLog::getRequestModelName, RequestLog::getActualModelName, RequestLog::getFirstTokenMs,
-                                RequestLog::getInputTokens,RequestLog::getOutputTokens,RequestLog::getRetryCount,RequestLog::getCost)
-                        .orderByDesc(RequestLog::getRequestTime));
+            @RequestParam(defaultValue = "10") Integer size,
+            @RequestParam(required = false) String requestModelName,
+            @RequestParam(required = false) String providerName,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String apiKey,
+            @RequestParam(required = false) Long startTime,
+            @RequestParam(required = false) Long endTime) {
+        LambdaQueryWrapper<RequestLog> wrapper = new LambdaQueryWrapper<>();
+        wrapper.select(RequestLog::getId, RequestLog::getRequestTime, RequestLog::getStatus, RequestLog::getProviderName,
+                RequestLog::getRequestModelName, RequestLog::getActualModelName, RequestLog::getFirstTokenMs,
+                RequestLog::getInputTokens, RequestLog::getOutputTokens, RequestLog::getRetryCount, RequestLog::getCost);
+        wrapper.like(StringUtils.hasText(requestModelName), RequestLog::getRequestModelName, requestModelName);
+        wrapper.like(StringUtils.hasText(providerName), RequestLog::getProviderName, providerName);
+        wrapper.eq(StringUtils.hasText(status), RequestLog::getStatus, status);
+        wrapper.eq(StringUtils.hasText(apiKey), RequestLog::getApiKey, apiKey);
+        wrapper.ge(startTime != null, RequestLog::getRequestTime, startTime);
+        wrapper.le(endTime != null, RequestLog::getRequestTime, endTime);
+        wrapper.orderByDesc(RequestLog::getRequestTime);
+        Page<RequestLog> page = requestLogService.page(new Page<>(current, size), wrapper);
         return ApiResponse.success(page);
     }
 

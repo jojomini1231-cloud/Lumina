@@ -1,5 +1,6 @@
 package com.lumina.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lumina.dto.ApiKeyUsageDto;
@@ -8,6 +9,7 @@ import com.lumina.entity.ApiKey;
 import com.lumina.mapper.ApiKeyMapper;
 import com.lumina.service.ApiKeyService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -81,8 +83,14 @@ public class ApiKeyController {
     @GetMapping("/page")
     public ApiResponse<Page<ApiKey>> getApiKeysByPage(
             @RequestParam(defaultValue = "1") Integer current,
-            @RequestParam(defaultValue = "10") Integer size) {
-        Page<ApiKey> page = apiKeyService.page(new Page<>(current, size));
+            @RequestParam(defaultValue = "10") Integer size,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) Boolean isEnabled) {
+        LambdaQueryWrapper<ApiKey> wrapper = new LambdaQueryWrapper<>();
+        wrapper.like(StringUtils.hasText(name), ApiKey::getName, name);
+        wrapper.eq(isEnabled != null, ApiKey::getIsEnabled, isEnabled);
+        wrapper.orderByDesc(ApiKey::getCreatedAt);
+        Page<ApiKey> page = apiKeyService.page(new Page<>(current, size), wrapper);
         return ApiResponse.success(page);
     }
 
