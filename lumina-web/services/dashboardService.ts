@@ -77,6 +77,19 @@ export interface DashboardObservability {
   providers: CircuitBreakerStatus[];
 }
 
+export interface HealthHeatmapCell {
+  timestamp: number;
+  totalRequests: number;
+  successRequests: number;
+  successRate: number;
+}
+
+export interface HealthHeatmapData {
+  overallSuccessRate: number;
+  days: number;
+  cells: HealthHeatmapCell[];
+}
+
 export const dashboardService = {
   async getOverview(): Promise<DashboardOverview> {
     const response = await api.get<any>('/dashboard/overview');
@@ -161,5 +174,13 @@ export const dashboardService = {
       caches: [],
       providers: [],
     };
+  },
+
+  async getHealthHeatmap(days: number = 7): Promise<HealthHeatmapData> {
+    const response = await api.get<any>(`/dashboard/health-heatmap?days=${days}`);
+    if (response.code === 200 && response.data) {
+      return response.data as HealthHeatmapData;
+    }
+    return { overallSuccessRate: 0, days, cells: [] };
   }
 };

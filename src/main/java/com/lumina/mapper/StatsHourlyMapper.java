@@ -28,6 +28,9 @@ public interface StatsHourlyMapper {
                                                    @Param("endHour") String endHour,
                                                    @Param("limit") int limit);
 
+    List<StatsHourly> selectAggregatedByHourRange(@Param("startHour") String startHour,
+                                                    @Param("endHour") String endHour);
+
     void deleteAll();
 
     void deleteBefore(@Param("beforeHour") String beforeHour);

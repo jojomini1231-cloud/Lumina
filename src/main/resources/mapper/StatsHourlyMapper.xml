@@ -96,6 +96,26 @@
         LIMIT #{limit}
     </select>
 
+    <!-- selectAggregatedByHourRange - MySQL -->
+    <select id="selectAggregatedByHourRange" resultType="com.lumina.entity.StatsHourly" databaseId="mysql">
+        SELECT stat_hour, SUM(total_requests) as total_requests,
+               SUM(success_count) as success_count
+        FROM stats_hourly
+        WHERE stat_hour &gt;= #{startHour} AND stat_hour &lt;= #{endHour}
+        GROUP BY stat_hour
+        ORDER BY stat_hour
+    </select>
+
+    <!-- selectAggregatedByHourRange - SQLite -->
+    <select id="selectAggregatedByHourRange" resultType="com.lumina.entity.StatsHourly" databaseId="sqlite">
+        SELECT stat_hour, SUM(total_requests) as total_requests,
+               SUM(success_count) as success_count
+        FROM stats_hourly
+        WHERE stat_hour &gt;= #{startHour} AND stat_hour &lt;= #{endHour}
+        GROUP BY stat_hour
+        ORDER BY stat_hour
+    </select>
+
     <delete id="deleteAll">
         DELETE FROM stats_hourly
     </delete>

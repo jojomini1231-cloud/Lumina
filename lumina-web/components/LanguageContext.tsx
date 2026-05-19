@@ -152,6 +152,20 @@ const translations = {
            volatile: '波动'
         }
       },
+      healthHeatmap: {
+        title: '服务健康监测',
+        days: '最近 {{days}} 天',
+        noData: '无数据',
+        tooltip: {
+          time: '{{start}} – {{end}}',
+          success: '成功',
+          fail: '失败',
+        },
+        legend: {
+          earliest: '最早',
+          latest: '最新',
+        }
+      },
       observability: {
         title: '运行态观测',
         subtitle: '展示缓存命中、故障切换、舱壁保护与日志背压的实时状态。',
@@ -672,6 +686,20 @@ const translations = {
            slow: 'Slow',
            abnormal: 'Abnormal',
            volatile: 'Volatile'
+        }
+      },
+      healthHeatmap: {
+        title: 'Service Health Monitor',
+        days: 'Last {{days}} days',
+        noData: 'No data',
+        tooltip: {
+          time: '{{start}} – {{end}}',
+          success: 'Success',
+          fail: 'Fail',
+        },
+        legend: {
+          earliest: 'Earliest',
+          latest: 'Latest',
         }
       },
       observability: {

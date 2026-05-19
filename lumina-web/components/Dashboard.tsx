@@ -29,6 +29,7 @@ import { useLanguage } from './LanguageContext';
 import {
   DashboardObservability,
   dashboardService,
+  HealthHeatmapData,
   ObservabilityCacheMetric,
   ProviderStats,
 } from '../services/dashboardService';
@@ -36,6 +37,7 @@ import { CircuitBreakerStatus, DashboardOverview } from '../types';
 import { DashboardSkeleton } from './Skeletons';
 import { SlideInItem } from './Animations';
 import { Pagination } from './Pagination';
+import { HealthHeatmap } from './HealthHeatmap';
 
 const StatCard: React.FC<{
   title: string;
@@ -150,6 +152,7 @@ export const Dashboard: React.FC = () => {
   const [modelUsageData, setModelUsageData] = useState<{ name: string; tokens: number }[]>([]);
   const [providerRanking, setProviderRanking] = useState<ProviderStats[]>([]);
   const [observability, setObservability] = useState<DashboardObservability | null>(null);
+  const [healthHeatmap, setHealthHeatmap] = useState<HealthHeatmapData | null>(null);
   const [lastRuntimeRefresh, setLastRuntimeRefresh] = useState<string>('--:--:--');
   const [isRefreshingRuntime, setIsRefreshingRuntime] = useState<boolean>(false);
   const [runtimePagination, setRuntimePagination] = useState({
@@ -169,12 +172,13 @@ export const Dashboard: React.FC = () => {
     const fetchAllData = async () => {
       setIsLoading(true);
       try {
-        const [overviewData, trafficRaw, modelUsageRaw, providerStatsRaw, observabilityRaw] = await Promise.all([
+        const [overviewData, trafficRaw, modelUsageRaw, providerStatsRaw, observabilityRaw, heatmapRaw] = await Promise.all([
           dashboardService.getOverview(),
           dashboardService.getTraffic(),
           dashboardService.getModelTokenUsage(),
           dashboardService.getProviderStats(),
           dashboardService.getObservability(),
+          dashboardService.getHealthHeatmap(7),
         ]);
 
         if (!active) {
@@ -183,6 +187,7 @@ export const Dashboard: React.FC = () => {
 
         setOverview(overviewData);
         setObservability(observabilityRaw);
+        setHealthHeatmap(heatmapRaw);
         setLastRuntimeRefresh(
           new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         );
@@ -544,6 +549,16 @@ export const Dashboard: React.FC = () => {
           </SlideInItem>
         ))}
       </div>
+
+      {healthHeatmap && healthHeatmap.cells.length > 0 && (
+        <SlideInItem delay={140} className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-card border border-gray-200/60 dark:border-gray-800 p-6">
+          <HealthHeatmap
+            cells={healthHeatmap.cells}
+            days={healthHeatmap.days}
+            overallSuccessRate={healthHeatmap.overallSuccessRate}
+          />
+        </SlideInItem>
+      )}
 
       <SlideInItem delay={160} className="bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-card border border-gray-200/60 dark:border-gray-800 p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between mb-6">

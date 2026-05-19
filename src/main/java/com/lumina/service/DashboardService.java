@@ -2,6 +2,7 @@ package com.lumina.service;
 
 import com.lumina.dto.DashboardOverviewDto;
 import com.lumina.dto.DashboardObservabilityDto;
+import com.lumina.dto.HealthHeatmapDto;
 import com.lumina.dto.ModelTokenUsageDto;
 import com.lumina.dto.ProviderStatsDto;
 import com.lumina.dto.RequestTrafficDto;
@@ -467,6 +468,62 @@ public class DashboardService {
                         .build())
                 .caches(caches)
                 .providers(providers)
+                .build();
+    }
+
+    public HealthHeatmapDto getHealthHeatmap(int days) {
+        if (days <= 0 || days > 30) {
+            days = 7;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime start = now.minusDays(days).withMinute(0).withSecond(0).withNano(0);
+
+        String startHour = start.format(HOUR_FMT);
+        String endHour = now.format(HOUR_FMT);
+
+        List<StatsHourly> hourlyData = statsHourlyMapper.selectAggregatedByHourRange(startHour, endHour);
+
+        java.util.Map<String, StatsHourly> dataMap = new java.util.HashMap<>();
+        if (hourlyData != null) {
+            for (StatsHourly h : hourlyData) {
+                if (h.getStatHour() != null) {
+                    dataMap.put(h.getStatHour().format(HOUR_FMT), h);
+                }
+            }
+        }
+
+        List<HealthHeatmapDto.HeatmapCell> cells = new java.util.ArrayList<>();
+        long totalRequests = 0;
+        long totalSuccess = 0;
+
+        LocalDateTime cursor = start;
+        while (!cursor.isAfter(now)) {
+            String hourKey = cursor.withMinute(0).format(HOUR_FMT);
+            long timestamp = cursor.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+
+            StatsHourly stats = dataMap.get(hourKey);
+            long hourReqs = stats != null && stats.getTotalRequests() != null ? stats.getTotalRequests() : 0;
+            long hourSuccess = stats != null && stats.getSuccessCount() != null ? stats.getSuccessCount() : 0;
+            long reqs = hourReqs / 4;
+            long success = hourSuccess / 4;
+
+            cells.add(HealthHeatmapDto.HeatmapCell.builder()
+                    .timestamp(timestamp)
+                    .totalRequests(reqs)
+                    .successRequests(success)
+                    .successRate(reqs > 0 ? success * 100.0 / reqs : -1)
+                    .build());
+
+            totalRequests += reqs;
+            totalSuccess += success;
+            cursor = cursor.plusMinutes(15);
+        }
+
+        return HealthHeatmapDto.builder()
+                .overallSuccessRate(totalRequests > 0 ? totalSuccess * 100.0 / totalRequests : 0)
+                .days(days)
+                .cells(cells)
                 .build();
     }
 
