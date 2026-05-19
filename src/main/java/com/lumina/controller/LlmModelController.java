@@ -71,13 +71,10 @@ public class LlmModelController {
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String modelName,
-            @RequestParam(required = false) String provider,
-            @RequestParam(required = false) Boolean isActive) {
+            @RequestParam(required = false) String provider) {
         LambdaQueryWrapper<LlmModel> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.like(StringUtils.hasText(modelName), LlmModel::getModelName, modelName);
         queryWrapper.like(StringUtils.hasText(provider), LlmModel::getProvider, provider);
-        queryWrapper.eq(isActive != null, LlmModel::getIsActive, isActive);
-        queryWrapper.orderByDesc(LlmModel::getLastUpdatedAt);
         Page<LlmModel> page = llmModelService.queryPage(new Page<>(current, size), queryWrapper);
         return ApiResponse.success(page);
     }
