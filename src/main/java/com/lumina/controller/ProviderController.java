@@ -44,9 +44,16 @@ public class ProviderController {
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<Provider> updateProvider(@PathVariable Long id, @RequestBody @Valid Provider provider) {
+    public ApiResponse<Provider> updateProvider(@PathVariable Long id, @RequestBody Provider provider) {
+        Provider existing = providerService.getById(id);
+        if (existing == null) {
+            throw new IllegalArgumentException("供应商不存在");
+        }
         provider.setId(id);
         provider.setUpdatedAt(LocalDateTime.now());
+        if (!StringUtils.hasText(provider.getApiKey())) {
+            provider.setApiKey(existing.getApiKey());
+        }
         providerService.updateById(provider);
         return ApiResponse.success("供应商更新成功", provider);
     }

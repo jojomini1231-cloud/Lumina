@@ -1,6 +1,7 @@
 package com.lumina.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -33,6 +34,7 @@ public class Provider {
     private Boolean beta;
 
     @NotEmpty(message = "API 密钥不能为空")
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String apiKey;
 
     @NotNull(message = "请选择是否自动同步")

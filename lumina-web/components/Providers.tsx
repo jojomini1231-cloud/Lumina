@@ -142,7 +142,7 @@ export const Providers: React.FC = () => {
 
   const handleOpenEdit = (provider: Provider) => {
     setEditingProvider(provider);
-    setFormData(provider);
+    setFormData({...provider, apiKey: ''});
     setModelsInput('');
     setIsSyncing(false);
     setIsModalOpen(true);
@@ -216,7 +216,7 @@ export const Providers: React.FC = () => {
       showToast(t('providers.validation.baseUrl'), 'error');
       return;
     }
-    if (!formData.apiKey?.trim()) {
+    if (!formData.apiKey?.trim() && !editingProvider) {
       showToast(t('providers.validation.apiKey'), 'error');
       return;
     }
@@ -574,14 +574,14 @@ export const Providers: React.FC = () => {
 
             <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
-                    {t('providers.modal.apiKey')} <span className="text-red-500">*</span>
+                    {t('providers.modal.apiKey')} {!editingProvider && <span className="text-red-500">*</span>}
                 </label>
-                <input 
+                <input
                     type="text"
-                    required
+                    required={!editingProvider}
                     value={formData.apiKey}
                     onChange={(e) => setFormData({...formData, apiKey: e.target.value})}
-                    placeholder={t('providers.modal.apiKeyPlaceholder')}
+                    placeholder={editingProvider ? '留空则不修改 / Leave empty to keep unchanged' : t('providers.modal.apiKeyPlaceholder')}
                     className="block w-full rounded-xl border-gray-200 dark:border-gray-700 shadow-sm focus:border-black dark:focus:border-white focus:ring-black dark:focus:ring-white text-sm py-2.5 px-3 font-mono bg-gray-50 dark:bg-gray-900 dark:text-white dark:placeholder-gray-600 transition-all"
                 />
             </div>
