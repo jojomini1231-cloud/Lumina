@@ -40,6 +40,8 @@ build/
 .vscode/
 
 data
+outputs/
+.gstack/
 
 **.text
 
