@@ -60,7 +60,7 @@ export const logService = {
       params.status = filters.status;
     }
     if (filters?.search) {
-      params.requestId = filters.search; // Assuming backend searches by requestId
+      params.requestModelName = filters.search;
     }
 
     const response = await api.get<any>('/request-logs/page', { params });
