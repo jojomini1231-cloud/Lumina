@@ -89,6 +89,6 @@ public class GlobalExceptionHandler {
         log.error("Unexpected error: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(ApiResponse.error(500, "服务器内部错误: " + ex.getMessage()));
+                .body(ApiResponse.error(500, "服务器内部错误"));
     }
 }

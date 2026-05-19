@@ -9,6 +9,9 @@ import org.springframework.stereotype.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.security.SecureRandom;
+import java.util.Base64;
+
 @Component
 public class InitDataConfig implements CommandLineRunner {
 
@@ -22,18 +25,28 @@ public class InitDataConfig implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        // 检查是否已经存在 admin 用户
         User existingAdmin = userService.lambdaQuery()
                 .eq(User::getUsername, "admin")
                 .one();
 
         if (existingAdmin == null) {
-            // 创建管理员用户
+            String password = generateRandomPassword();
             User admin = new User();
             admin.setUsername("admin");
-            admin.setPassword(passwordEncoder.encode("admin123"));
+            admin.setPassword(passwordEncoder.encode(password));
             userService.save(admin);
-            log.info("Created default admin user: admin/admin123");
+            log.warn("========================================");
+            log.warn("  INITIAL ADMIN CREDENTIALS");
+            log.warn("  Username: admin");
+            log.warn("  Password: {}", password);
+            log.warn("  Please change this password immediately!");
+            log.warn("========================================");
         }
+    }
+
+    private String generateRandomPassword() {
+        byte[] bytes = new byte[18];
+        new SecureRandom().nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 }
