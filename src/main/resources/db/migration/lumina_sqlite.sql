@@ -1,14 +1,37 @@
 /*
- Lumina SQLite Database Schema
+ Lumina SQLite Database Schema (Complete)
+ Version: 0.4.0
+ Includes all migrations through V005
 
- SQLite compatible database schema for Lumina application
+ Usage:
+   sqlite3 lumina.db < lumina_sqlite.sql
 */
 
--- Enable foreign keys
 PRAGMA foreign_keys = ON;
 
 -- ----------------------------
--- Table structure for api_keys
+-- Table: users
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `users` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `username` TEXT NOT NULL UNIQUE,
+  `password` TEXT NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT (datetime('now')),
+  `updated_at` DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ----------------------------
+-- Table: settings
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `settings` (
+  `setting_key` TEXT PRIMARY KEY,
+  `setting_value` TEXT NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT (datetime('now')),
+  `updated_at` DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ----------------------------
+-- Table: api_keys
 -- ----------------------------
 CREATE TABLE IF NOT EXISTS `api_keys` (
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,59 +48,7 @@ CREATE TABLE IF NOT EXISTS `api_keys` (
 CREATE INDEX IF NOT EXISTS `idx_api_keys_enabled` ON `api_keys` (`is_enabled`);
 
 -- ----------------------------
--- Table structure for llm_models
--- ----------------------------
-CREATE TABLE IF NOT EXISTS `llm_models` (
-  `model_name` TEXT,
-  `provider` TEXT,
-  `input_price` REAL DEFAULT 0.0,
-  `output_price` REAL DEFAULT 0.0,
-  `context_limit` INTEGER DEFAULT 0,
-  `output_limit` INTEGER DEFAULT 0,
-  `cache_read_price` REAL,
-  `cache_write_price` REAL,
-  `is_reasoning` INTEGER,
-  `is_tool_call` INTEGER,
-  `is_attachment` INTEGER,
-  `is_structured_output` INTEGER,
-  `is_temperature` INTEGER,
-  `is_open_weights` INTEGER,
-  `input_type` TEXT,
-  `output_type` TEXT,
-  `display_name` TEXT,
-  `family` TEXT,
-  `knowledge_cutoff` TEXT,
-  `release_date` TEXT,
-  `input_limit` INTEGER,
-  `last_updated_at` TEXT,
-  `created_at` DATETIME NOT NULL DEFAULT (datetime('now')),
-  `updated_at` DATETIME NOT NULL DEFAULT (datetime('now'))
-);
-
--- ----------------------------
--- Table structure for migration_records
--- ----------------------------
-CREATE TABLE IF NOT EXISTS `migration_records` (
-  `version` INTEGER PRIMARY KEY,
-  `status` INTEGER NOT NULL,
-  `executed_at` DATETIME NOT NULL DEFAULT (datetime('now'))
-);
-
--- ----------------------------
--- Table structure for model_groups
--- ----------------------------
-CREATE TABLE IF NOT EXISTS `model_groups` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `name` TEXT NOT NULL UNIQUE,
-  `balance_mode` INTEGER NOT NULL,
-  `match_regex` TEXT,
-  `first_token_timeout` INTEGER DEFAULT 45000,
-  `created_at` DATETIME NOT NULL DEFAULT (datetime('now')),
-  `updated_at` DATETIME NOT NULL DEFAULT (datetime('now'))
-);
-
--- ----------------------------
--- Table structure for providers
+-- Table: providers
 -- ----------------------------
 CREATE TABLE IF NOT EXISTS `providers` (
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,7 +69,20 @@ CREATE INDEX IF NOT EXISTS `idx_providers_type` ON `providers` (`type`);
 CREATE INDEX IF NOT EXISTS `idx_providers_enabled` ON `providers` (`is_enabled`);
 
 -- ----------------------------
--- Table structure for model_group_items
+-- Table: model_groups
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `model_groups` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `name` TEXT NOT NULL UNIQUE,
+  `balance_mode` INTEGER NOT NULL,
+  `match_regex` TEXT,
+  `first_token_timeout` INTEGER DEFAULT 45000,
+  `created_at` DATETIME NOT NULL DEFAULT (datetime('now')),
+  `updated_at` DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ----------------------------
+-- Table: model_group_items
 -- ----------------------------
 CREATE TABLE IF NOT EXISTS `model_group_items` (
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,7 +102,41 @@ CREATE INDEX IF NOT EXISTS `idx_group_items_group_id` ON `model_group_items` (`g
 CREATE INDEX IF NOT EXISTS `idx_group_items_provider_id` ON `model_group_items` (`provider_id`);
 
 -- ----------------------------
--- Table structure for provider_runtime_stats
+-- Table: llm_models (includes V004, V005)
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `llm_models` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `model_name` TEXT NOT NULL,
+  `provider` TEXT NOT NULL DEFAULT '',
+  `input_price` REAL DEFAULT 0.0,
+  `output_price` REAL DEFAULT 0.0,
+  `context_limit` INTEGER DEFAULT 0,
+  `output_limit` INTEGER DEFAULT 0,
+  `cache_read_price` REAL,
+  `cache_write_price` REAL,
+  `is_reasoning` INTEGER,
+  `is_tool_call` INTEGER,
+  `is_attachment` INTEGER,
+  `is_structured_output` INTEGER,
+  `is_temperature` INTEGER,
+  `is_open_weights` INTEGER,
+  `input_type` TEXT,
+  `output_type` TEXT,
+  `display_name` TEXT,
+  `family` TEXT,
+  `knowledge_cutoff` TEXT,
+  `release_date` TEXT,
+  `input_limit` INTEGER,
+  `last_updated_at` TEXT,
+  `is_active` INTEGER NOT NULL DEFAULT 0,
+  `created_at` DATETIME NOT NULL DEFAULT (datetime('now')),
+  `updated_at` DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS `uk_model_provider` ON `llm_models` (`model_name`, `provider`);
+
+-- ----------------------------
+-- Table: provider_runtime_stats
 -- ----------------------------
 CREATE TABLE IF NOT EXISTS `provider_runtime_stats` (
   `provider_id` TEXT PRIMARY KEY,
@@ -138,10 +156,10 @@ CREATE TABLE IF NOT EXISTS `provider_runtime_stats` (
 );
 
 CREATE INDEX IF NOT EXISTS `idx_provider_stats_score` ON `provider_runtime_stats` (`score`);
-CREATE INDEX IF NOT EXISTS `idx_provider_stats_circuit_state` ON `provider_runtime_stats` (`circuit_state`);
+CREATE INDEX IF NOT EXISTS `idx_provider_stats_circuit` ON `provider_runtime_stats` (`circuit_state`);
 
 -- ----------------------------
--- Table structure for request_logs
+-- Table: request_logs
 -- ----------------------------
 CREATE TABLE IF NOT EXISTS `request_logs` (
   `id` TEXT PRIMARY KEY,
@@ -170,89 +188,97 @@ CREATE TABLE IF NOT EXISTS `request_logs` (
   `created_at` DATETIME DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS `idx_request_logs_request_time` ON `request_logs` (`request_time`);
-CREATE INDEX IF NOT EXISTS `idx_request_logs_provider_id` ON `request_logs` (`provider_id`);
-CREATE INDEX IF NOT EXISTS `idx_request_logs_request_model` ON `request_logs` (`request_model_name`);
-CREATE INDEX IF NOT EXISTS `idx_request_logs_request_id` ON `request_logs` (`request_id`);
-CREATE INDEX IF NOT EXISTS `idx_request_logs_api_key` ON `request_logs` (`api_key`);
+CREATE INDEX IF NOT EXISTS `idx_logs_request_time` ON `request_logs` (`request_time`);
+CREATE INDEX IF NOT EXISTS `idx_logs_provider_id` ON `request_logs` (`provider_id`);
+CREATE INDEX IF NOT EXISTS `idx_logs_request_model` ON `request_logs` (`request_model_name`);
+CREATE INDEX IF NOT EXISTS `idx_logs_request_id` ON `request_logs` (`request_id`);
+CREATE INDEX IF NOT EXISTS `idx_logs_api_key` ON `request_logs` (`api_key`);
+CREATE INDEX IF NOT EXISTS `idx_logs_created_at` ON `request_logs` (`created_at`);
 
 -- ----------------------------
--- Table structure for settings
+-- Table: stats_daily (V002)
 -- ----------------------------
-CREATE TABLE IF NOT EXISTS `settings` (
-  `setting_key` TEXT PRIMARY KEY,
-  `setting_value` TEXT NOT NULL,
-  `created_at` DATETIME NOT NULL DEFAULT (datetime('now')),
-  `updated_at` DATETIME NOT NULL DEFAULT (datetime('now'))
+CREATE TABLE IF NOT EXISTS `stats_daily` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `stat_date` TEXT NOT NULL,
+  `provider_id` INTEGER DEFAULT NULL,
+  `provider_name` TEXT DEFAULT NULL,
+  `model_name` TEXT DEFAULT NULL,
+  `total_requests` INTEGER NOT NULL DEFAULT 0,
+  `success_count` INTEGER NOT NULL DEFAULT 0,
+  `total_input_tokens` INTEGER NOT NULL DEFAULT 0,
+  `total_output_tokens` INTEGER NOT NULL DEFAULT 0,
+  `total_cost` REAL NOT NULL DEFAULT 0,
+  `total_latency_ms` INTEGER NOT NULL DEFAULT 0,
+  `created_at` TEXT NOT NULL DEFAULT (datetime('now')),
+  `updated_at` TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS `uk_daily_date_provider_model` ON `stats_daily` (`stat_date`, `provider_id`, `model_name`);
+CREATE INDEX IF NOT EXISTS `idx_daily_stat_date` ON `stats_daily` (`stat_date`);
+
 -- ----------------------------
--- Table structure for users
+-- Table: stats_hourly (V002)
 -- ----------------------------
-CREATE TABLE IF NOT EXISTS `users` (
+CREATE TABLE IF NOT EXISTS `stats_hourly` (
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `username` TEXT NOT NULL UNIQUE,
-  `password` TEXT NOT NULL,
-  `created_at` DATETIME NOT NULL DEFAULT (datetime('now')),
-  `updated_at` DATETIME NOT NULL DEFAULT (datetime('now'))
+  `stat_hour` TEXT NOT NULL,
+  `provider_id` INTEGER DEFAULT NULL,
+  `provider_name` TEXT DEFAULT NULL,
+  `model_name` TEXT DEFAULT NULL,
+  `total_requests` INTEGER NOT NULL DEFAULT 0,
+  `success_count` INTEGER NOT NULL DEFAULT 0,
+  `total_input_tokens` INTEGER NOT NULL DEFAULT 0,
+  `total_output_tokens` INTEGER NOT NULL DEFAULT 0,
+  `total_cost` REAL NOT NULL DEFAULT 0,
+  `total_latency_ms` INTEGER NOT NULL DEFAULT 0,
+  `created_at` TEXT NOT NULL DEFAULT (datetime('now')),
+  `updated_at` TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS `uk_hourly_hour_provider_model` ON `stats_hourly` (`stat_hour`, `provider_id`, `model_name`);
+CREATE INDEX IF NOT EXISTS `idx_hourly_stat_hour` ON `stats_hourly` (`stat_hour`);
+
+-- ----------------------------
+-- Table: migration_records
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `migration_records` (
+  `version` INTEGER PRIMARY KEY,
+  `status` INTEGER NOT NULL,
+  `executed_at` DATETIME NOT NULL DEFAULT (datetime('now'))
 );
 
 -- ----------------------------
 -- Triggers for auto-update timestamp
 -- ----------------------------
--- Trigger for api_keys
-CREATE TRIGGER IF NOT EXISTS `trigger_api_keys_updated_at`
-AFTER UPDATE ON `api_keys`
-FOR EACH ROW
-BEGIN
-  UPDATE `api_keys` SET `updated_at` = datetime('now') WHERE `id` = NEW.`id`;
-END;
+CREATE TRIGGER IF NOT EXISTS `trg_users_updated`
+AFTER UPDATE ON `users` FOR EACH ROW
+BEGIN UPDATE `users` SET `updated_at` = datetime('now') WHERE `id` = NEW.`id`; END;
 
-CREATE TRIGGER IF NOT EXISTS `trigger_llm_models_updated_at`
-AFTER UPDATE ON `llm_models`
-FOR EACH ROW
-BEGIN
-  UPDATE `llm_models` SET `updated_at` = datetime('now') WHERE `model_name` = NEW.`model_name`;
-END;
+CREATE TRIGGER IF NOT EXISTS `trg_settings_updated`
+AFTER UPDATE ON `settings` FOR EACH ROW
+BEGIN UPDATE `settings` SET `updated_at` = datetime('now') WHERE `setting_key` = NEW.`setting_key`; END;
 
-CREATE TRIGGER IF NOT EXISTS `trigger_model_groups_updated_at`
-AFTER UPDATE ON `model_groups`
-FOR EACH ROW
-BEGIN
-  UPDATE `model_groups` SET `updated_at` = datetime('now') WHERE `id` = NEW.`id`;
-END;
+CREATE TRIGGER IF NOT EXISTS `trg_api_keys_updated`
+AFTER UPDATE ON `api_keys` FOR EACH ROW
+BEGIN UPDATE `api_keys` SET `updated_at` = datetime('now') WHERE `id` = NEW.`id`; END;
 
-CREATE TRIGGER IF NOT EXISTS `trigger_providers_updated_at`
-AFTER UPDATE ON `providers`
-FOR EACH ROW
-BEGIN
-  UPDATE `providers` SET `updated_at` = datetime('now') WHERE `id` = NEW.`id`;
-END;
+CREATE TRIGGER IF NOT EXISTS `trg_providers_updated`
+AFTER UPDATE ON `providers` FOR EACH ROW
+BEGIN UPDATE `providers` SET `updated_at` = datetime('now') WHERE `id` = NEW.`id`; END;
 
-CREATE TRIGGER IF NOT EXISTS `trigger_model_group_items_updated_at`
-AFTER UPDATE ON `model_group_items`
-FOR EACH ROW
-BEGIN
-  UPDATE `model_group_items` SET `updated_at` = datetime('now') WHERE `id` = NEW.`id`;
-END;
+CREATE TRIGGER IF NOT EXISTS `trg_model_groups_updated`
+AFTER UPDATE ON `model_groups` FOR EACH ROW
+BEGIN UPDATE `model_groups` SET `updated_at` = datetime('now') WHERE `id` = NEW.`id`; END;
 
-CREATE TRIGGER IF NOT EXISTS `trigger_provider_runtime_stats_updated_at`
-AFTER UPDATE ON `provider_runtime_stats`
-FOR EACH ROW
-BEGIN
-  UPDATE `provider_runtime_stats` SET `updated_at` = datetime('now') WHERE `provider_id` = NEW.`provider_id`;
-END;
+CREATE TRIGGER IF NOT EXISTS `trg_group_items_updated`
+AFTER UPDATE ON `model_group_items` FOR EACH ROW
+BEGIN UPDATE `model_group_items` SET `updated_at` = datetime('now') WHERE `id` = NEW.`id`; END;
 
-CREATE TRIGGER IF NOT EXISTS `trigger_settings_updated_at`
-AFTER UPDATE ON `settings`
-FOR EACH ROW
-BEGIN
-  UPDATE `settings` SET `updated_at` = datetime('now') WHERE `setting_key` = NEW.`setting_key`;
-END;
+CREATE TRIGGER IF NOT EXISTS `trg_llm_models_updated`
+AFTER UPDATE ON `llm_models` FOR EACH ROW
+BEGIN UPDATE `llm_models` SET `updated_at` = datetime('now') WHERE `id` = NEW.`id`; END;
 
-CREATE TRIGGER IF NOT EXISTS `trigger_users_updated_at`
-AFTER UPDATE ON `users`
-FOR EACH ROW
-BEGIN
-  UPDATE `users` SET `updated_at` = datetime('now') WHERE `id` = NEW.`id`;
-END;
+CREATE TRIGGER IF NOT EXISTS `trg_runtime_stats_updated`
+AFTER UPDATE ON `provider_runtime_stats` FOR EACH ROW
+BEGIN UPDATE `provider_runtime_stats` SET `updated_at` = datetime('now') WHERE `provider_id` = NEW.`provider_id`; END;
