@@ -26,8 +26,11 @@ public class CircuitBreakerController {
     /**
      * 获取单个 Provider 的熔断器状态
      */
-    @GetMapping("/status/{providerId}")
+    @GetMapping("/status/{*providerId}")
     public ResponseEntity<CircuitBreakerStatusResponse> getStatus(@PathVariable String providerId) {
+        if (providerId.startsWith("/")) {
+            providerId = providerId.substring(1);
+        }
         CircuitBreakerStatusResponse status = managementService.getStatus(providerId);
         if (status == null) {
             return ResponseEntity.notFound().build();
@@ -75,10 +78,13 @@ public class CircuitBreakerController {
     /**
      * 释放手动控制，恢复自动管理
      */
-    @PostMapping("/release/{providerId}")
+    @PostMapping("/release/{*providerId}")
     public ResponseEntity<CircuitBreakerStatusResponse> releaseManualControl(
             @PathVariable String providerId,
             @RequestHeader(value = "X-Operator", required = false) String operator) {
+        if (providerId.startsWith("/")) {
+            providerId = providerId.substring(1);
+        }
         log.info("释放手动控制请求: providerId={}", providerId);
 
         CircuitBreakerStatusResponse response = managementService.releaseManualControl(providerId, operator);
