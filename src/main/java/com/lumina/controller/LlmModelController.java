@@ -48,18 +48,34 @@ public class LlmModelController {
 
     @PutMapping("/{modelName}")
     public ApiResponse<LlmModel> updateLlmModel(@PathVariable String modelName, @RequestBody LlmModel model) {
-        model.setModelName(modelName);
-        model.setUpdatedAt(LocalDateTime.now());
-        boolean success = llmModelService.updateById(model);
-        if (!success) {
+        LlmModel existing = llmModelService.getOne(new LambdaQueryWrapper<LlmModel>()
+                .eq(LlmModel::getModelName, modelName)
+                .eq(LlmModel::getIsActive, true)
+                .last("limit 1"));
+        if (existing == null) {
+            existing = llmModelService.getOne(new LambdaQueryWrapper<LlmModel>()
+                    .eq(LlmModel::getModelName, modelName)
+                    .last("limit 1"));
+        }
+        if (existing == null) {
             throw new IllegalArgumentException("LlmModel not found with name: " + modelName);
         }
+        model.setId(existing.getId());
+        model.setModelName(modelName);
+        model.setUpdatedAt(LocalDateTime.now());
+        llmModelService.updateById(model);
         return ApiResponse.success(model);
     }
 
     @DeleteMapping("/{modelName}")
     public ApiResponse<Void> deleteLlmModel(@PathVariable String modelName) {
-        boolean success = llmModelService.removeById(modelName);
+        List<LlmModel> models = llmModelService.list(new LambdaQueryWrapper<LlmModel>()
+                .eq(LlmModel::getModelName, modelName));
+        if (models.isEmpty()) {
+            throw new IllegalArgumentException("LlmModel not found with name: " + modelName);
+        }
+        List<Long> ids = models.stream().map(LlmModel::getId).toList();
+        boolean success = llmModelService.removeByIds(ids);
         if (!success) {
             throw new IllegalArgumentException("LlmModel not found with name: " + modelName);
         }
