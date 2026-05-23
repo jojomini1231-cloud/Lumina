@@ -85,8 +85,8 @@ export const providerService = {
   },
 
   // Sync models from provider
-  async syncModels(baseUrl: string, apiKey: string): Promise<string[]> {
-    const response = await api.post<any>('/providers/models', { baseUrl, apiKey });
+  async syncModels(baseUrl: string, apiKey?: string, id?: string): Promise<string[]> {
+    const response = await api.post<any>('/providers/models', { baseUrl, apiKey: apiKey || '', id });
     if (response.code === 200 && Array.isArray(response.data)) {
       return response.data;
     }

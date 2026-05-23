@@ -98,6 +98,12 @@ public class ProviderController {
 
     @PostMapping("/models")
     public ApiResponse<List<String>> getModels(@RequestBody Provider provider) {
+        if (!StringUtils.hasText(provider.getApiKey()) && provider.getId() != null) {
+            Provider existing = providerService.getById(provider.getId());
+            if (existing != null) {
+                provider.setApiKey(existing.getApiKey());
+            }
+        }
         return ApiResponse.success(providerService.getModels(provider));
     }
 }

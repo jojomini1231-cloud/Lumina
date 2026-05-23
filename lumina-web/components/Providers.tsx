@@ -278,7 +278,7 @@ export const Providers: React.FC = () => {
       showToast(t('providers.syncing'), 'info');
 
       try {
-        const models = await providerService.syncModels(provider.baseUrl, provider.apiKey);
+        const models = await providerService.syncModels(provider.baseUrl, provider.apiKey, provider.id);
         
         // Update the provider with the new models
         await providerService.update(provider.id, { ...provider, models });
@@ -323,14 +323,14 @@ export const Providers: React.FC = () => {
   };
 
   const handleSyncModelsFromForm = async () => {
-    if (!formData.baseUrl || !formData.apiKey) {
+    if (!formData.baseUrl || (!formData.apiKey && !editingProvider)) {
        showToast(t('providers.validation.baseUrl') + ' / ' + t('providers.validation.apiKey'), 'error');
        return;
     }
 
     setIsSyncing(true);
     try {
-        const models = await providerService.syncModels(formData.baseUrl, formData.apiKey);
+        const models = await providerService.syncModels(formData.baseUrl, formData.apiKey, editingProvider?.id);
         setFormData(prev => ({ ...prev, models }));
         setModelsInput('');
         showToast(t('providers.syncedSuccess', { count: models.length }), 'success');
