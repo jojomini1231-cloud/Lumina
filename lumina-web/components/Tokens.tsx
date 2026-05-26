@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Copy, Check, X, Loader2, BarChart3, ToggleLeft, ToggleRight, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Copy, Check, X, Loader2, BarChart3, ToggleLeft, ToggleRight, ChevronDown, ChevronRight, PencilLine } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
 import { tokenService } from '../services/tokenService';
 import { AccessToken } from '../types';
@@ -19,6 +19,9 @@ export const Tokens: React.FC = () => {
   const [copyFeedbackId, setCopyFeedbackId] = useState<string | null>(null);
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const [showDisabled, setShowDisabled] = useState(false);
+  const [quotaEditId, setQuotaEditId] = useState<string | null>(null);
+  const [quotaInputs, setQuotaInputs] = useState<Record<string, string>>({});
+  const [savingQuotaId, setSavingQuotaId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTokens();
@@ -74,6 +77,44 @@ export const Tokens: React.FC = () => {
     } catch (error) {
       console.error('Failed to revoke token', error);
       showToast(t('common.fail'), 'error');
+    }
+  };
+
+  const startQuotaEdit = (token: AccessToken) => {
+    setQuotaEditId(token.id);
+    setQuotaInputs((current) => ({
+      ...current,
+      [token.id]: token.maxAmount == null ? '' : String(token.maxAmount),
+    }));
+  };
+
+  const cancelQuotaEdit = () => {
+    setQuotaEditId(null);
+  };
+
+  const handleQuotaInputChange = (id: string, value: string) => {
+    setQuotaInputs((current) => ({ ...current, [id]: value }));
+  };
+
+  const handleQuotaSave = async (id: string) => {
+    const rawValue = (quotaInputs[id] || '').trim();
+    const maxAmount = rawValue === '' ? null : Number(rawValue);
+    if (maxAmount !== null && (!Number.isFinite(maxAmount) || maxAmount < 0)) {
+      showToast(t('settings.tokens.invalidQuota'), 'error');
+      return;
+    }
+
+    setSavingQuotaId(id);
+    try {
+      await tokenService.updateQuota(id, maxAmount);
+      setQuotaEditId(null);
+      fetchTokens();
+      showToast(t('settings.tokens.quotaUpdated'), 'success');
+    } catch (error) {
+      console.error('Failed to update token quota', error);
+      showToast(t('common.fail'), 'error');
+    } finally {
+      setSavingQuotaId(null);
     }
   };
 
@@ -166,6 +207,13 @@ export const Tokens: React.FC = () => {
                   onRevokeClick={setRevokeId}
                   onRevokeConfirm={handleRevokeToken}
                   onRevokeCancel={() => setRevokeId(null)}
+                  quotaEditId={quotaEditId}
+                  quotaValue={quotaInputs[token.id] || ''}
+                  savingQuotaId={savingQuotaId}
+                  onQuotaEdit={startQuotaEdit}
+                  onQuotaInputChange={handleQuotaInputChange}
+                  onQuotaSave={handleQuotaSave}
+                  onQuotaCancel={cancelQuotaEdit}
                   t={t}
                 />
               ))}
@@ -198,6 +246,13 @@ export const Tokens: React.FC = () => {
                     onRevokeClick={setRevokeId}
                     onRevokeConfirm={handleRevokeToken}
                     onRevokeCancel={() => setRevokeId(null)}
+                    quotaEditId={quotaEditId}
+                    quotaValue={quotaInputs[token.id] || ''}
+                    savingQuotaId={savingQuotaId}
+                    onQuotaEdit={startQuotaEdit}
+                    onQuotaInputChange={handleQuotaInputChange}
+                    onQuotaSave={handleQuotaSave}
+                    onQuotaCancel={cancelQuotaEdit}
                     t={t}
                   />
                 ))}
@@ -220,10 +275,34 @@ interface TokenCardProps {
   onRevokeClick: (id: string) => void;
   onRevokeConfirm: (id: string) => void;
   onRevokeCancel: () => void;
+  quotaEditId: string | null;
+  quotaValue: string;
+  savingQuotaId: string | null;
+  onQuotaEdit: (token: AccessToken) => void;
+  onQuotaInputChange: (id: string, value: string) => void;
+  onQuotaSave: (id: string) => void;
+  onQuotaCancel: () => void;
   t: (key: string) => string;
 }
 
-const TokenCard: React.FC<TokenCardProps> = ({ token, revokeId, copyFeedbackId, onCopy, onToggle, onRevokeClick, onRevokeConfirm, onRevokeCancel, t }) => (
+const TokenCard: React.FC<TokenCardProps> = ({
+  token,
+  revokeId,
+  copyFeedbackId,
+  onCopy,
+  onToggle,
+  onRevokeClick,
+  onRevokeConfirm,
+  onRevokeCancel,
+  quotaEditId,
+  quotaValue,
+  savingQuotaId,
+  onQuotaEdit,
+  onQuotaInputChange,
+  onQuotaSave,
+  onQuotaCancel,
+  t,
+}) => (
   <div className="p-4 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-xl hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm transition-all">
     <div className="flex flex-col sm:flex-row sm:items-center justify-between">
       <div className="mb-3 sm:mb-0">
@@ -280,7 +359,7 @@ const TokenCard: React.FC<TokenCardProps> = ({ token, revokeId, copyFeedbackId, 
     </div>
 
     {/* Usage Stats */}
-    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 grid grid-cols-2 lg:grid-cols-5 gap-3">
       <div className="flex items-center gap-1.5">
         <BarChart3 size={13} className="text-gray-400" />
         <span className="text-xs text-gray-500 dark:text-gray-400">{t('settings.tokens.requests')}:</span>
@@ -298,7 +377,53 @@ const TokenCard: React.FC<TokenCardProps> = ({ token, revokeId, copyFeedbackId, 
         <span className="text-xs text-gray-500 dark:text-gray-400">{t('settings.tokens.cost')}:</span>
         <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">${(token.totalCost || 0).toFixed(4)}</span>
       </div>
+      <div className="flex items-center gap-1.5 min-w-0 col-span-2 lg:col-span-1">
+        <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{t('settings.tokens.quota')}:</span>
+        <span className={`text-xs font-semibold truncate ${isQuotaExceeded(token) ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>
+          {formatQuota(token, t)}
+        </span>
+        {quotaEditId !== token.id && (
+          <Button
+            onClick={() => onQuotaEdit(token)}
+            variant="secondary"
+            size="sm"
+            className="h-7 shrink-0 rounded-md px-2 text-xs text-gray-600 shadow-none dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+            title={t('settings.tokens.editQuota')}
+            leftIcon={<PencilLine size={13} />}
+          >
+            {t('settings.tokens.setQuota')}
+          </Button>
+        )}
+      </div>
     </div>
+    {quotaEditId === token.id && (
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onQuotaSave(token.id);
+        }}
+        className="mt-3 flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2 dark:border-gray-800 dark:bg-gray-900/60 sm:flex-row sm:items-center"
+      >
+        <label className="text-xs font-medium text-gray-500 dark:text-gray-400 sm:shrink-0">{t('settings.tokens.quota')}</label>
+        <input
+          type="number"
+          min="0"
+          step="0.0001"
+          value={quotaValue}
+          onChange={(event) => onQuotaInputChange(token.id, event.target.value)}
+          placeholder={t('settings.tokens.unlimited')}
+          className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-900/10 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:focus:ring-white/10"
+        />
+        <div className="flex items-center gap-2 sm:shrink-0">
+          <Button type="submit" variant="primary" size="sm" loading={savingQuotaId === token.id} leftIcon={<Check size={15} />}>
+            {t('common.save')}
+          </Button>
+          <Button type="button" onClick={onQuotaCancel} variant="secondary" size="sm" leftIcon={<X size={15} />}>
+            {t('common.cancel')}
+          </Button>
+        </div>
+      </form>
+    )}
   </div>
 );
 
@@ -308,11 +433,20 @@ const formatTokenCount = (count: number): string => {
   return String(count);
 };
 
+const formatQuota = (token: AccessToken, t: (key: string) => string): string => {
+  if (token.maxAmount == null) {
+    return t('settings.tokens.unlimited');
+  }
+  return `$${(token.totalCost || 0).toFixed(4)} / $${token.maxAmount.toFixed(4)}`;
+};
+
+const isQuotaExceeded = (token: AccessToken): boolean => {
+  return token.maxAmount != null && (token.totalCost || 0) >= token.maxAmount;
+};
+
 const CheckCircleIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
     <polyline points="22 4 12 14.01 9 11.01"></polyline>
   </svg>
 );
-
-
