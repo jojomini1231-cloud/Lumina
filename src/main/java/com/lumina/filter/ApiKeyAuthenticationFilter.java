@@ -67,27 +67,33 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
         }
 
         return apiKeyService.validateApiKey(apiKey)
+                .onErrorResume(e -> {
+                    log.error("Error validating API key for path: {}", path, e);
+                    return Mono.empty();
+                })
                 .flatMap(isValid -> {
                     if (!isValid) {
                         log.warn("Invalid API key for path: {}", path);
                         return writeError(exchange, HttpStatus.UNAUTHORIZED, "invalid_request_error", "Invalid API key");
                     }
 
-                    return apiKeyService.hasAvailableQuota(apiKey).flatMap(hasQuota -> {
-                        if (!hasQuota) {
-                            log.warn("API key quota exceeded for path: {}", path);
-                            return writeError(exchange, HttpStatus.TOO_MANY_REQUESTS, "insufficient_quota", "API key quota exceeded");
-                        }
+                    return apiKeyService.hasAvailableQuota(apiKey)
+                            .onErrorResume(e -> {
+                                log.error("Error checking quota for path: {}", path, e);
+                                return Mono.just(true);
+                            })
+                            .flatMap(hasQuota -> {
+                                if (!hasQuota) {
+                                    log.warn("API key quota exceeded for path: {}", path);
+                                    return writeError(exchange, HttpStatus.TOO_MANY_REQUESTS, "insufficient_quota", "API key quota exceeded");
+                                }
 
-                        log.debug("API key validated successfully for path: {}", path);
-                        exchange.getAttributes().put("API_KEY", apiKey);
-                        return chain.filter(exchange);
-                    });
+                                log.debug("API key validated successfully for path: {}", path);
+                                exchange.getAttributes().put("API_KEY", apiKey);
+                                return chain.filter(exchange);
+                            });
                 })
-                .onErrorResume(e -> {
-                    log.error("Error validating API key for path: {}", path, e);
-                    return unauthorized(exchange, "Authentication error");
-                });
+                .switchIfEmpty(unauthorized(exchange, "Authentication error"));
     }
 
     /**
