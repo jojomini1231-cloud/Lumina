@@ -135,31 +135,57 @@
     <!-- getHealthHeatmapBuckets - MySQL -->
     <select id="getHealthHeatmapBuckets" resultType="com.lumina.dto.HealthHeatmapDto$HeatmapBucket" databaseId="mysql">
         SELECT
-            CONCAT(
-                DATE_FORMAT(created_at, '%Y-%m-%d %H:'),
-                LPAD(FLOOR(MINUTE(created_at) / 15) * 15, 2, '0'),
-                ':00'
-            ) as bucket_start,
+            CAST(FLOOR(log_epoch / 900) * 900 AS UNSIGNED) as bucket_start_epoch,
             COUNT(*) as total_requests,
             COALESCE(SUM(CASE WHEN UPPER(status) = 'SUCCESS' THEN 1 ELSE 0 END), 0) as success_requests
-        FROM request_logs
-        WHERE created_at &gt;= #{startTime} AND created_at &lt; #{endTime}
-        GROUP BY bucket_start
-        ORDER BY bucket_start
+        FROM (
+            SELECT
+                request_time as log_epoch,
+                status
+            FROM request_logs
+            WHERE request_time &gt;= #{startEpochSecond}
+              AND request_time &lt; #{endEpochSecond}
+              AND UPPER(COALESCE(status, '')) IN ('SUCCESS', 'FAIL')
+            UNION ALL
+            SELECT
+                UNIX_TIMESTAMP(created_at) as log_epoch,
+                status
+            FROM request_logs
+            WHERE request_time IS NULL
+              AND created_at &gt;= FROM_UNIXTIME(#{startEpochSecond})
+              AND created_at &lt; FROM_UNIXTIME(#{endEpochSecond})
+              AND UPPER(COALESCE(status, '')) IN ('SUCCESS', 'FAIL')
+        ) heatmap_logs
+        GROUP BY bucket_start_epoch
+        ORDER BY bucket_start_epoch
     </select>
 
     <!-- getHealthHeatmapBuckets - SQLite -->
     <select id="getHealthHeatmapBuckets" resultType="com.lumina.dto.HealthHeatmapDto$HeatmapBucket" databaseId="sqlite">
         SELECT
-            strftime('%Y-%m-%d %H:', created_at) ||
-                printf('%02d', CAST(CAST(strftime('%M', created_at) AS INTEGER) / 15 AS INTEGER) * 15) ||
-                ':00' as bucket_start,
+            CAST((log_epoch / 900) AS INTEGER) * 900 as bucket_start_epoch,
             COUNT(*) as total_requests,
             COALESCE(SUM(CASE WHEN UPPER(status) = 'SUCCESS' THEN 1 ELSE 0 END), 0) as success_requests
-        FROM request_logs
-        WHERE created_at &gt;= #{startTime} AND created_at &lt; #{endTime}
-        GROUP BY bucket_start
-        ORDER BY bucket_start
+        FROM (
+            SELECT
+                request_time as log_epoch,
+                status
+            FROM request_logs
+            WHERE request_time &gt;= #{startEpochSecond}
+              AND request_time &lt; #{endEpochSecond}
+              AND UPPER(COALESCE(status, '')) IN ('SUCCESS', 'FAIL')
+            UNION ALL
+            SELECT
+                CAST(strftime('%s', created_at) AS INTEGER) as log_epoch,
+                status
+            FROM request_logs
+            WHERE request_time IS NULL
+              AND created_at &gt;= datetime(#{startEpochSecond}, 'unixepoch')
+              AND created_at &lt; datetime(#{endEpochSecond}, 'unixepoch')
+              AND UPPER(COALESCE(status, '')) IN ('SUCCESS', 'FAIL')
+        ) heatmap_logs
+        GROUP BY bucket_start_epoch
+        ORDER BY bucket_start_epoch
     </select>
 
 </mapper>

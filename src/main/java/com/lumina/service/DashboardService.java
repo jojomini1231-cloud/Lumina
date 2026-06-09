@@ -58,8 +58,10 @@ public class DashboardService {
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter HOUR_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:00:00");
-    private static final DateTimeFormatter BUCKET_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final int HEATMAP_BUCKET_MINUTES = 15;
+    private static final int HEATMAP_BUCKET_SECONDS = HEATMAP_BUCKET_MINUTES * 60;
+    private static final int HEATMAP_BUCKETS_PER_DAY = 24 * 60 / HEATMAP_BUCKET_MINUTES;
 
     /**
      * 获取仪表盘概览统计
@@ -498,19 +500,21 @@ public class DashboardService {
             days = 7;
         }
 
-        LocalDateTime now = LocalDateTime.now(clock).withNano(0);
-        LocalDateTime start = alignToQuarterHour(now.minusDays(days));
-        LocalDateTime endExclusive = now.plusSeconds(1);
+        long nowEpochSecond = clock.instant().getEpochSecond();
+        long currentBucketEpoch = floorToQuarterHour(nowEpochSecond);
+        int bucketCount = days * HEATMAP_BUCKETS_PER_DAY;
+        long startEpoch = currentBucketEpoch - (long) (bucketCount - 1) * HEATMAP_BUCKET_SECONDS;
+        long endEpochExclusive = currentBucketEpoch + HEATMAP_BUCKET_SECONDS;
 
         List<HealthHeatmapDto.HeatmapBucket> buckets = dashboardMapper.getHealthHeatmapBuckets(
-                start.format(BUCKET_FMT),
-                endExclusive.format(BUCKET_FMT));
+                startEpoch,
+                endEpochExclusive);
 
-        Map<String, HealthHeatmapDto.HeatmapBucket> dataMap = new HashMap<>();
+        Map<Long, HealthHeatmapDto.HeatmapBucket> dataMap = new HashMap<>();
         if (buckets != null) {
             for (HealthHeatmapDto.HeatmapBucket bucket : buckets) {
-                if (bucket.getBucketStart() != null) {
-                    dataMap.put(bucket.getBucketStart(), bucket);
+                if (bucket.getBucketStartEpoch() != null) {
+                    dataMap.put(bucket.getBucketStartEpoch(), bucket);
                 }
             }
         }
@@ -519,17 +523,14 @@ public class DashboardService {
         long totalRequests = 0;
         long totalSuccess = 0;
 
-        LocalDateTime cursor = start;
-        while (!cursor.isAfter(now)) {
-            String bucketKey = cursor.format(BUCKET_FMT);
-            long timestamp = cursor.atZone(clock.getZone()).toInstant().toEpochMilli();
-
-            HealthHeatmapDto.HeatmapBucket bucket = dataMap.get(bucketKey);
+        for (int i = 0; i < bucketCount; i++) {
+            long bucketEpoch = startEpoch + (long) i * HEATMAP_BUCKET_SECONDS;
+            HealthHeatmapDto.HeatmapBucket bucket = dataMap.get(bucketEpoch);
             long reqs = bucket != null && bucket.getTotalRequests() != null ? bucket.getTotalRequests() : 0;
             long success = bucket != null && bucket.getSuccessRequests() != null ? bucket.getSuccessRequests() : 0;
 
             cells.add(HealthHeatmapDto.HeatmapCell.builder()
-                    .timestamp(timestamp)
+                    .timestamp(bucketEpoch * 1000)
                     .totalRequests(reqs)
                     .successRequests(success)
                     .successRate(reqs > 0 ? success * 100.0 / reqs : -1)
@@ -537,7 +538,6 @@ public class DashboardService {
 
             totalRequests += reqs;
             totalSuccess += success;
-            cursor = cursor.plusMinutes(15);
         }
 
         return HealthHeatmapDto.builder()
@@ -547,10 +547,8 @@ public class DashboardService {
                 .build();
     }
 
-    private LocalDateTime alignToQuarterHour(LocalDateTime time) {
-        return time.withMinute((time.getMinute() / 15) * 15)
-                .withSecond(0)
-                .withNano(0);
+    private long floorToQuarterHour(long epochSecond) {
+        return Math.floorDiv(epochSecond, HEATMAP_BUCKET_SECONDS) * HEATMAP_BUCKET_SECONDS;
     }
 
     private DashboardObservabilityDto.CacheMetric buildCacheMetric(String cacheName) {

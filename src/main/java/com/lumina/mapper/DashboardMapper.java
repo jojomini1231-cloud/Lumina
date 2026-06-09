@@ -41,6 +41,6 @@ public interface DashboardMapper {
     /**
      * 获取 15 分钟粒度的健康热力图数据
      */
-    List<HealthHeatmapDto.HeatmapBucket> getHealthHeatmapBuckets(@Param("startTime") String startTime,
-                                                                 @Param("endTime") String endTime);
+    List<HealthHeatmapDto.HeatmapBucket> getHealthHeatmapBuckets(@Param("startEpochSecond") Long startEpochSecond,
+                                                                 @Param("endEpochSecond") Long endEpochSecond);
 }

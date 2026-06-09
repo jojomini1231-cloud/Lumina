@@ -32,7 +32,7 @@ public class HealthHeatmapDto {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class HeatmapBucket {
-        private String bucketStart;
+        private Long bucketStartEpoch;
         private Long totalRequests;
         private Long successRequests;
     }
