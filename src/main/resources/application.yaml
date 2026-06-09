@@ -152,6 +152,7 @@ logging:
 # Lumina 特定配置
 lumina:
   stats:
+    time-zone: ${LUMINA_STATS_TIME_ZONE:Asia/Shanghai}
     log-keep-days: 0        # 0 = 永不删除日志行
     content-keep-days: 3    # 请求/响应内容保留3天后置NULL
   # CORS 配置

@@ -19,13 +19,17 @@ import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.math.BigDecimal;
 import java.util.Comparator;
@@ -55,6 +59,9 @@ public class DashboardService {
     private CircuitBreakerManagementService circuitBreakerManagementService;
 
     private Clock clock = Clock.systemDefaultZone();
+
+    @Value("${lumina.stats.time-zone:Asia/Shanghai}")
+    private String statsTimeZone = "Asia/Shanghai";
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter HOUR_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:00:00");
@@ -229,82 +236,65 @@ public class DashboardService {
 
     /**
      * 获取24小时请求流量
-     * 从 stats_hourly 聚合表读取，回退到原始查询
+     * 直接从 request_logs.request_time 读取，保证当前小时实时展示
      */
     public List<RequestTrafficDto> getRequestTraffic() {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime last24Hours = now.minusHours(24);
+        ZoneId zone = statsZoneId();
+        Instant currentHour = clock.instant().atZone(zone)
+                .truncatedTo(java.time.temporal.ChronoUnit.HOURS)
+                .toInstant();
+        Instant startHour = currentHour.minus(Duration.ofHours(23));
+        Instant endExclusive = currentHour.plus(Duration.ofHours(1));
 
-        String startHour = last24Hours.format(HOUR_FMT);
-        String endHour = now.format(HOUR_FMT);
+        List<RequestTrafficDto> dbResults = dashboardMapper.getRequestTrafficByRequestTime(
+                startHour.getEpochSecond(),
+                endExclusive.getEpochSecond(),
+                bucketOffsetSeconds(zone));
 
-        List<StatsHourly> hourlyData = statsHourlyMapper.selectByHourRange(startHour, endHour);
-
-        if (hourlyData == null || hourlyData.isEmpty()) {
-            return getRequestTrafficFallback();
-        }
-
-        java.util.Map<Integer, Long> dataMap = new java.util.HashMap<>();
-        for (StatsHourly h : hourlyData) {
-            if (h.getStatHour() != null) {
-                int hour = h.getStatHour().getHour();
-                dataMap.merge(hour, h.getTotalRequests() != null ? h.getTotalRequests() : 0L, Long::sum);
+        Map<Long, RequestTrafficDto> dataMap = new HashMap<>();
+        if (dbResults != null) {
+            for (RequestTrafficDto dto : dbResults) {
+                if (dto.getTimestamp() != null) {
+                    dataMap.put(dto.getTimestamp(), dto);
+                }
             }
         }
 
+        return buildTrafficBuckets(startHour, zone, dataMap);
+    }
+
+    private List<RequestTrafficDto> buildTrafficBuckets(Instant startHour, ZoneId zone,
+                                                        Map<Long, RequestTrafficDto> dataMap) {
         List<RequestTrafficDto> result = new java.util.ArrayList<>();
-        LocalDateTime currentHour = last24Hours.withMinute(0).withSecond(0).withNano(0);
+        Instant bucketInstant = startHour;
 
         for (int i = 0; i < 24; i++) {
-            int hour = currentHour.getHour();
-            long timestamp = currentHour.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
-            long count = dataMap.getOrDefault(hour, 0L);
+            long timestamp = bucketInstant.toEpochMilli();
+            RequestTrafficDto dto = dataMap.get(timestamp);
 
             result.add(RequestTrafficDto.builder()
-                    .hour(hour)
-                    .requestCount(count)
+                    .hour(bucketInstant.atZone(zone).getHour())
+                    .requestCount(dto != null && dto.getRequestCount() != null ? dto.getRequestCount() : 0L)
                     .timestamp(timestamp)
                     .build());
 
-            currentHour = currentHour.plusHours(1);
+            bucketInstant = bucketInstant.plus(Duration.ofHours(1));
         }
 
         return result;
     }
 
-    private List<RequestTrafficDto> getRequestTrafficFallback() {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime last24Hours = now.minusHours(24);
-
-        List<RequestTrafficDto> dbResults = dashboardMapper.getRequestTraffic(last24Hours.format(FORMATTER));
-
-        java.util.Map<Integer, RequestTrafficDto> dataMap = new java.util.HashMap<>();
-        for (RequestTrafficDto dto : dbResults) {
-            dataMap.put(dto.getHour(), dto);
+    private ZoneId statsZoneId() {
+        try {
+            return ZoneId.of(statsTimeZone);
+        } catch (Exception ignored) {
+            return ZoneId.of("Asia/Shanghai");
         }
+    }
 
-        List<RequestTrafficDto> result = new java.util.ArrayList<>();
-        LocalDateTime currentHour = last24Hours.withMinute(0).withSecond(0).withNano(0);
-
-        for (int i = 0; i < 24; i++) {
-            int hour = currentHour.getHour();
-            long timestamp = currentHour.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
-
-            RequestTrafficDto dto = dataMap.get(hour);
-            if (dto != null) {
-                result.add(dto);
-            } else {
-                result.add(RequestTrafficDto.builder()
-                        .hour(hour)
-                        .requestCount(0L)
-                        .timestamp(timestamp)
-                        .build());
-            }
-
-            currentHour = currentHour.plusHours(1);
-        }
-
-        return result;
+    private int bucketOffsetSeconds(ZoneId zone) {
+        ZoneOffset offset = zone.getRules().getOffset(clock.instant());
+        return offset.getTotalSeconds();
     }
 
     /**

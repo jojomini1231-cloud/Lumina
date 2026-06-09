@@ -1,7 +1,12 @@
 package com.lumina.service;
 
 import com.lumina.dto.HealthHeatmapDto;
+import com.lumina.dto.RequestTrafficDto;
 import com.lumina.mapper.DashboardMapper;
+import com.lumina.mapper.StatsDailyMapper;
+import com.lumina.mapper.StatsHourlyMapper;
+import com.lumina.stats.StatsRedisReader;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,6 +20,9 @@ import java.time.ZoneId;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -24,14 +32,93 @@ class DashboardServiceTest {
     @Mock
     private DashboardMapper dashboardMapper;
 
+    @Mock
+    private StatsDailyMapper statsDailyMapper;
+
+    @Mock
+    private StatsHourlyMapper statsHourlyMapper;
+
+    @Mock
+    private StatsRedisReader statsRedisReader;
+
     private DashboardService dashboardService;
 
     @BeforeEach
     void setUp() {
         dashboardService = new DashboardService();
         ReflectionTestUtils.setField(dashboardService, "dashboardMapper", dashboardMapper);
+        ReflectionTestUtils.setField(dashboardService, "statsDailyMapper", statsDailyMapper);
+        ReflectionTestUtils.setField(dashboardService, "statsHourlyMapper", statsHourlyMapper);
+        ReflectionTestUtils.setField(dashboardService, "statsRedisReader", statsRedisReader);
+        ReflectionTestUtils.setField(dashboardService, "meterRegistry", new SimpleMeterRegistry());
+        ReflectionTestUtils.setField(dashboardService, "statsTimeZone", "Asia/Shanghai");
         ReflectionTestUtils.setField(dashboardService, "clock",
                 Clock.fixed(Instant.parse("2026-06-07T02:37:42Z"), ZoneId.of("Asia/Shanghai")));
+    }
+
+    @Test
+    void requestTrafficUsesConfiguredTimezoneCurrentHourAndEpochBuckets() {
+        ReflectionTestUtils.setField(dashboardService, "clock",
+                Clock.fixed(Instant.parse("2026-06-07T09:37:42Z"), ZoneId.of("Asia/Shanghai")));
+
+        when(dashboardMapper.getRequestTrafficByRequestTime(1780740000L, 1780826400L, 28800))
+                .thenReturn(List.of(
+                        RequestTrafficDto.builder()
+                                .hour(18)
+                                .requestCount(11L)
+                                .timestamp(1780740000000L)
+                                .build(),
+                        RequestTrafficDto.builder()
+                                .hour(17)
+                                .requestCount(42L)
+                                .timestamp(1780822800000L)
+                                .build()
+                ));
+
+        List<RequestTrafficDto> traffic = dashboardService.getRequestTraffic();
+
+        verify(dashboardMapper).getRequestTrafficByRequestTime(1780740000L, 1780826400L, 28800);
+        assertEquals(24, traffic.size());
+
+        RequestTrafficDto firstBucket = traffic.get(0);
+        assertEquals(18, firstBucket.getHour());
+        assertEquals(1780740000000L, firstBucket.getTimestamp());
+        assertEquals(11L, firstBucket.getRequestCount());
+
+        RequestTrafficDto lastBucket = traffic.get(23);
+        assertEquals(17, lastBucket.getHour());
+        assertEquals(1780822800000L, lastBucket.getTimestamp());
+        assertEquals(42L, lastBucket.getRequestCount());
+    }
+
+    @Test
+    void requestTrafficDoesNotMergeSameClockHourAcrossDays() {
+        ReflectionTestUtils.setField(dashboardService, "clock",
+                Clock.fixed(Instant.parse("2026-06-07T10:37:42Z"), ZoneId.of("Asia/Shanghai")));
+
+        when(dashboardMapper.getRequestTrafficByRequestTime(anyLong(), anyLong(), anyInt()))
+                .thenReturn(List.of(
+                        RequestTrafficDto.builder()
+                                .hour(18)
+                                .requestCount(7L)
+                                .timestamp(1780740000000L)
+                                .build(),
+                        RequestTrafficDto.builder()
+                                .hour(18)
+                                .requestCount(19L)
+                                .timestamp(1780826400000L)
+                                .build()
+                ));
+
+        List<RequestTrafficDto> traffic = dashboardService.getRequestTraffic();
+
+        assertEquals(19L, traffic.get(23).getRequestCount());
+        assertTrue(traffic.stream().noneMatch(bucket -> bucket.getRequestCount() == 7L));
+        assertEquals(19L, traffic.stream()
+                .filter(bucket -> bucket.getTimestamp().equals(1780826400000L))
+                .findFirst()
+                .map(RequestTrafficDto::getRequestCount)
+                .orElse(0L));
     }
 
     @Test

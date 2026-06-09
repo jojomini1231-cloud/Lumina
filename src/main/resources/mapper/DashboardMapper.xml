@@ -48,28 +48,38 @@
         WHERE created_at &gt;= #{startTime} AND created_at &lt; #{endTime}
     </select>
 
-    <!-- getRequestTraffic - MySQL -->
-    <select id="getRequestTraffic" resultType="com.lumina.dto.RequestTrafficDto" databaseId="mysql">
+    <!-- getRequestTrafficByRequestTime - MySQL -->
+    <select id="getRequestTrafficByRequestTime" resultType="com.lumina.dto.RequestTrafficDto" databaseId="mysql">
         SELECT
-            HOUR(created_at) as hour,
+            HOUR(FROM_UNIXTIME(bucket_epoch)) as hour,
             COUNT(*) as requestCount,
-            UNIX_TIMESTAMP(DATE_FORMAT(MIN(created_at), '%Y-%m-%d %H:00:00')) * 1000 as timestamp
-        FROM request_logs
-        WHERE created_at &gt;= #{startTime}
-        GROUP BY HOUR(created_at), DATE_FORMAT(created_at, '%Y-%m-%d %H:00:00')
-        ORDER BY hour
+            bucket_epoch * 1000 as timestamp
+        FROM (
+            SELECT
+                FLOOR((request_time + #{bucketOffsetSeconds}) / 3600) * 3600 - #{bucketOffsetSeconds} as bucket_epoch
+            FROM request_logs
+            WHERE request_time &gt;= #{startEpochSecond}
+              AND request_time &lt; #{endEpochSecond}
+        ) traffic_logs
+        GROUP BY bucket_epoch
+        ORDER BY timestamp
     </select>
 
-    <!-- getRequestTraffic - SQLite -->
-    <select id="getRequestTraffic" resultType="com.lumina.dto.RequestTrafficDto" databaseId="sqlite">
+    <!-- getRequestTrafficByRequestTime - SQLite -->
+    <select id="getRequestTrafficByRequestTime" resultType="com.lumina.dto.RequestTrafficDto" databaseId="sqlite">
         SELECT
-            CAST(strftime('%H', created_at) AS INTEGER) as hour,
+            CAST(strftime('%H', bucket_epoch, 'unixepoch') AS INTEGER) as hour,
             COUNT(*) as requestCount,
-            CAST(strftime('%s', strftime('%Y-%m-%d %H:00:00', MIN(created_at))) AS INTEGER) * 1000 as timestamp
-        FROM request_logs
-        WHERE created_at &gt;= #{startTime}
-        GROUP BY strftime('%Y-%m-%d %H', created_at)
-        ORDER BY hour
+            bucket_epoch * 1000 as timestamp
+        FROM (
+            SELECT
+                CAST(((request_time + #{bucketOffsetSeconds}) / 3600) AS INTEGER) * 3600 - #{bucketOffsetSeconds} as bucket_epoch
+            FROM request_logs
+            WHERE request_time &gt;= #{startEpochSecond}
+              AND request_time &lt; #{endEpochSecond}
+        ) traffic_logs
+        GROUP BY bucket_epoch
+        ORDER BY timestamp
     </select>
 
     <!-- getModelTokenUsage - MySQL -->

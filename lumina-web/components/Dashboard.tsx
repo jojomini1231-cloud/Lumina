@@ -144,6 +144,13 @@ const formatTimestamp = (timestamp?: number) => {
   return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 };
 
+const formatHourLabel = (timestamp?: number) => {
+  if (!timestamp) {
+    return '--:--';
+  }
+  return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
 export const Dashboard: React.FC = () => {
   const { t } = useLanguage();
   const [metric, setMetric] = useState<RankingMetric>('calls');
@@ -197,7 +204,7 @@ export const Dashboard: React.FC = () => {
             trafficRaw
               .sort((a, b) => a.timestamp - b.timestamp)
               .map((item) => ({
-                time: `${item.hour.toString().padStart(2, '0')}:00`,
+                time: formatHourLabel(item.timestamp),
                 requests: item.requestCount,
               })),
           );

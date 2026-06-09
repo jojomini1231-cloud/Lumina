@@ -24,9 +24,11 @@ public interface DashboardMapper {
     DashboardOverviewDto getDateRangeStats(@Param("startTime") String startTime, @Param("endTime") String endTime);
 
     /**
-     * 获取24小时请求流量数据
+     * 基于 request_time 时间戳获取请求流量数据
      */
-    List<RequestTrafficDto> getRequestTraffic(@Param("startTime") String startTime);
+    List<RequestTrafficDto> getRequestTrafficByRequestTime(@Param("startEpochSecond") long startEpochSecond,
+                                                           @Param("endEpochSecond") long endEpochSecond,
+                                                           @Param("bucketOffsetSeconds") int bucketOffsetSeconds);
 
     /**
      * 获取模型 Token 使用统计
