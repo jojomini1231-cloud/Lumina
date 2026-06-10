@@ -16,7 +16,9 @@ import com.lumina.util.CostCalculator;
 import com.lumina.util.SnowflakeIdGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -26,6 +28,8 @@ import java.util.UUID;
 
 @Slf4j
 public abstract class AbstractRequestExecutor implements LlmRequestExecutor {
+
+    private static final int MAX_ERROR_MESSAGE_LENGTH = 32_000;
 
     @Autowired
     protected SnowflakeIdGenerator snowflakeIdGenerator;
@@ -206,9 +210,51 @@ public abstract class AbstractRequestExecutor implements LlmRequestExecutor {
         }
         ctx.setStatus("FAIL");
         ctx.setErrorStage("HTTP");
-        ctx.setErrorMessage(err.getMessage());
+        String upstreamResponse = extractUpstreamResponse(err);
+        ctx.setErrorMessage(buildErrorMessage(err, upstreamResponse));
+        if (StringUtils.hasText(upstreamResponse)) {
+            ctx.setResponseContent(upstreamResponse);
+        }
         ctx.setTotalTimeMs((int) ((System.nanoTime() - ctx.getStartNano()) / 1_000_000));
         logWriter.submit(ctx);
+    }
+
+    private String buildErrorMessage(Throwable err, String upstreamResponse) {
+        String message = err.getMessage();
+        if (!StringUtils.hasText(message)) {
+            message = err.getClass().getSimpleName();
+        }
+        if (StringUtils.hasText(upstreamResponse)) {
+            message = message + ", 上游响应: " + upstreamResponse;
+        }
+        return truncate(message, MAX_ERROR_MESSAGE_LENGTH);
+    }
+
+    private String extractUpstreamResponse(Throwable err) {
+        WebClientResponseException responseException = findCause(err, WebClientResponseException.class);
+        if (responseException == null) {
+            return null;
+        }
+        return responseException.getResponseBodyAsString();
+    }
+
+    private <T extends Throwable> T findCause(Throwable err, Class<T> type) {
+        Throwable current = err;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return type.cast(current);
+            }
+            current = current.getCause();
+        }
+        return null;
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        String suffix = "...[truncated]";
+        return value.substring(0, maxLength - suffix.length()) + suffix;
     }
 
     protected void recordSuccess(RequestLogContext ctx, String content) {

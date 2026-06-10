@@ -48,12 +48,11 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
                 .bodyValue(request)
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, response ->
-                        response.bodyToMono(String.class)
-                                .flatMap(body -> {
+                        response.createException()
+                                .doOnNext(exception -> {
+                                    String body = exception.getResponseBodyAsString();
                                     log.error("Upstream OpenAI-compatible request failed: status={}, provider={}, model={}, bodyLength={}",
                                             response.statusCode(), provider.getProviderName(), provider.getModelName(), body == null ? 0 : body.length());
-                                    return Mono.error(new RuntimeException(
-                                            "HTTP " + response.statusCode() + " from provider " + provider.getProviderName()));
                                 }))
                 .bodyToMono(ObjectNode.class);
 
@@ -80,12 +79,11 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
                 .accept(MediaType.TEXT_EVENT_STREAM)
                 .bodyValue(request).retrieve()
                 .onStatus(HttpStatusCode::isError, response ->
-                        response.bodyToMono(String.class)
-                                .flatMap(body -> {
+                        response.createException()
+                                .doOnNext(exception -> {
+                                    String body = exception.getResponseBodyAsString();
                                     log.error("Upstream OpenAI-compatible stream request failed: status={}, provider={}, model={}, bodyLength={}",
                                             response.statusCode(), provider.getProviderName(), provider.getModelName(), body == null ? 0 : body.length());
-                                    return Mono.error(new RuntimeException(
-                                            "HTTP " + response.statusCode() + " from provider " + provider.getProviderName()));
                                 }))
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {});
 

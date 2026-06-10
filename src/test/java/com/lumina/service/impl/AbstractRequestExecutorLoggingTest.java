@@ -8,13 +8,17 @@ import com.lumina.util.SnowflakeIdGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -109,6 +113,28 @@ class AbstractRequestExecutorLoggingTest {
         verify(logWriter, times(1)).submit(any(RequestLogContext.class));
         assertEquals("FAIL", ctx.getStatus());
         assertEquals("CLIENT", ctx.getErrorStage());
+    }
+
+    @Test
+    void recordErrorIncludesUpstreamResponseBody() {
+        RequestLogContext ctx = context();
+        String upstreamResponse = "{\"error\":\"1m 上下文已经全量可用，请启用 1m 上下文后重试\",\"type\":\"error\"}";
+        WebClientResponseException error = WebClientResponseException.create(
+                400,
+                "Bad Request",
+                HttpHeaders.EMPTY,
+                upstreamResponse.getBytes(StandardCharsets.UTF_8),
+                StandardCharsets.UTF_8
+        );
+
+        executor.recordError(ctx, error);
+
+        verify(logWriter, times(1)).submit(ctx);
+        assertEquals("FAIL", ctx.getStatus());
+        assertEquals("HTTP", ctx.getErrorStage());
+        assertTrue(ctx.getErrorMessage().contains("400 Bad Request"));
+        assertTrue(ctx.getErrorMessage().contains("上游响应: " + upstreamResponse));
+        assertEquals(upstreamResponse, ctx.getResponseContent());
     }
 
     private RequestLogContext context() {
