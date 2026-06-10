@@ -268,6 +268,10 @@ pnpm dev
   - HALF_OPEN 探测参数
   - failover 最大次数
   - provider 最大并发数
+- `lumina.failover.*`
+  - SAPR Top-K 与 Softmax 温度
+  - HALF_OPEN Provider 选择权重系数
+  - 轮询模式：`STRICT` 为纯轮询，`HEALTHY` 会跳过熔断不可用 Provider
 - `lumina.cache.*`
   - `group-config-ttl-seconds`
   - `api-key-ttl-seconds`

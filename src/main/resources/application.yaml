@@ -196,6 +196,13 @@ lumina:
     window-bucket-count: 10              # 桶数量
     window-bucket-duration-ms: 1000      # 每桶时间跨度 (1秒)
 
+  # Failover / 路由配置
+  failover:
+    top-k: 3                             # SAPR 候选 Top-K 数量
+    softmax-t: 10.0                      # SAPR Softmax 温度
+    half-open-weight-factor: 0.5         # HALF_OPEN Provider 选择权重系数
+    round-robin-mode: ${LUMINA_ROUND_ROBIN_MODE:STRICT} # STRICT=纯轮询；HEALTHY=跳过熔断不可用 Provider
+
   # 认证配置
   auth:
     jwt:
