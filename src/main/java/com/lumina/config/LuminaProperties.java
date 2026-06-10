@@ -135,5 +135,11 @@ public class LuminaProperties {
         private int topK = 3;
         private double softmaxT = 10.0;
         private double halfOpenWeightFactor = 0.5;
+        private RoundRobinMode roundRobinMode = RoundRobinMode.STRICT;
+    }
+
+    public enum RoundRobinMode {
+        STRICT,
+        HEALTHY
     }
 }

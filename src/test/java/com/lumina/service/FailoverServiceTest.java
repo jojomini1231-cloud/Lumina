@@ -4,14 +4,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.lumina.config.CircuitBreakerConfig;
 import com.lumina.config.CircuitBreakerConfigResolver;
+import com.lumina.config.EffectiveCircuitBreakerConfig;
 import com.lumina.config.LuminaProperties;
 import com.lumina.dto.ModelGroupConfig;
 import com.lumina.dto.ModelGroupConfigItem;
 import com.lumina.mapper.ProviderRuntimeStatsMapper;
 import com.lumina.metrics.RelayMetrics;
 import com.lumina.state.CircuitBreaker;
+import com.lumina.state.CircuitBreakerEventLogger;
+import com.lumina.state.CircuitState;
+import com.lumina.state.FailureType;
 import com.lumina.state.ProviderScoreCalculator;
+import com.lumina.state.ProviderRuntimeState;
 import com.lumina.state.ProviderStateRegistry;
+import com.lumina.util.ProviderIdGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,7 +31,13 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class FailoverServiceTest {
@@ -60,7 +72,8 @@ class FailoverServiceTest {
                 circuitBreaker,
                 configResolver,
                 relayMetrics,
-                new LuminaProperties()
+                new LuminaProperties(),
+                new RoundRobinLoadBalancer(relayMetrics)
         );
     }
 
@@ -98,6 +111,145 @@ class FailoverServiceTest {
         assertEquals("provider-b", actual.get("provider").asText());
         assertEquals(List.of("provider-a", "provider-b"), providerNames);
         verifyNoInteractions(scoreCalculator, circuitBreaker);
+    }
+
+    @Test
+    void healthyRoundRobinSkipsProvidersRejectedByCircuitBreaker() {
+        LuminaProperties properties = new LuminaProperties();
+        properties.getFailover().setRoundRobinMode(LuminaProperties.RoundRobinMode.HEALTHY);
+        CircuitBreakerConfig circuitBreakerConfig = new CircuitBreakerConfig();
+        ProviderStateRegistry providerStateRegistry = new ProviderStateRegistry(providerRuntimeStatsMapper, circuitBreakerConfig);
+        CircuitBreakerConfigResolver configResolver = new CircuitBreakerConfigResolver(circuitBreakerConfig);
+        FailoverService healthyFailoverService = new FailoverService(
+                providerStateRegistry,
+                scoreCalculator,
+                circuitBreaker,
+                configResolver,
+                relayMetrics,
+                properties,
+                new RoundRobinLoadBalancer(relayMetrics)
+        );
+        when(circuitBreaker.allowRequest(any(), any(EffectiveCircuitBreakerConfig.class)))
+                .thenReturn(false, true);
+
+        ModelGroupConfigItem selected = healthyFailoverService.selectAvailableProvider(roundRobinGroup("healthy-rr"));
+
+        assertEquals("provider-b", selected.getProviderName());
+        verify(circuitBreaker, times(2)).allowRequest(any(), any(EffectiveCircuitBreakerConfig.class));
+        verify(relayMetrics).recordProviderSkipped(org.mockito.ArgumentMatchers.startsWith("round_robin_circuit_"));
+        verify(relayMetrics).recordSelection("round_robin");
+    }
+
+    @Test
+    void healthyRoundRobinRecordsFailureOnError() {
+        LuminaProperties properties = new LuminaProperties();
+        properties.getFailover().setRoundRobinMode(LuminaProperties.RoundRobinMode.HEALTHY);
+        CircuitBreakerConfig circuitBreakerConfig = new CircuitBreakerConfig();
+        ProviderStateRegistry providerStateRegistry = new ProviderStateRegistry(providerRuntimeStatsMapper, circuitBreakerConfig);
+        CircuitBreakerConfigResolver configResolver = new CircuitBreakerConfigResolver(circuitBreakerConfig);
+        FailoverService healthyFailoverService = new FailoverService(
+                providerStateRegistry,
+                scoreCalculator,
+                circuitBreaker,
+                configResolver,
+                relayMetrics,
+                properties,
+                new RoundRobinLoadBalancer(relayMetrics)
+        );
+        when(circuitBreaker.allowRequest(any(), any(EffectiveCircuitBreakerConfig.class))).thenReturn(true);
+
+        healthyFailoverService.executeWithFailoverMono(
+                provider -> Mono.error(new RuntimeException("provider down")),
+                roundRobinGroup("healthy-rr-failure"),
+                1000
+        ).onErrorResume(e -> Mono.empty()).block(Duration.ofSeconds(1));
+
+        verify(circuitBreaker, org.mockito.Mockito.atLeastOnce())
+                .onFailure(any(), any(FailureType.class), any(EffectiveCircuitBreakerConfig.class));
+        verify(scoreCalculator, org.mockito.Mockito.atLeastOnce())
+                .update(any(), any(FailureType.class), anyLong());
+    }
+
+    @Test
+    void healthyRoundRobinFallsBackWhenAllProvidersCircuitOpen() {
+        LuminaProperties properties = new LuminaProperties();
+        properties.getFailover().setRoundRobinMode(LuminaProperties.RoundRobinMode.HEALTHY);
+        CircuitBreakerConfig circuitBreakerConfig = new CircuitBreakerConfig();
+        ProviderStateRegistry providerStateRegistry = new ProviderStateRegistry(providerRuntimeStatsMapper, circuitBreakerConfig);
+        CircuitBreakerConfigResolver configResolver = new CircuitBreakerConfigResolver(circuitBreakerConfig);
+        FailoverService healthyFailoverService = new FailoverService(
+                providerStateRegistry,
+                scoreCalculator,
+                circuitBreaker,
+                configResolver,
+                relayMetrics,
+                properties,
+                new RoundRobinLoadBalancer(relayMetrics)
+        );
+        when(circuitBreaker.allowRequest(any(), any(EffectiveCircuitBreakerConfig.class))).thenReturn(false);
+
+        ModelGroupConfigItem selected = healthyFailoverService.selectAvailableProvider(roundRobinGroup("healthy-rr-all-open"));
+
+        assertEquals("provider-a", selected.getProviderName());
+        verify(relayMetrics).recordFallbackToRoundRobin();
+    }
+
+    @Test
+    void healthyRoundRobinUpdatesScoreAndCircuitBreakerOnSuccess() {
+        LuminaProperties properties = new LuminaProperties();
+        properties.getFailover().setRoundRobinMode(LuminaProperties.RoundRobinMode.HEALTHY);
+        CircuitBreakerConfig circuitBreakerConfig = new CircuitBreakerConfig();
+        ProviderStateRegistry providerStateRegistry = new ProviderStateRegistry(providerRuntimeStatsMapper, circuitBreakerConfig);
+        CircuitBreakerConfigResolver configResolver = new CircuitBreakerConfigResolver(circuitBreakerConfig);
+        FailoverService healthyFailoverService = new FailoverService(
+                providerStateRegistry,
+                scoreCalculator,
+                circuitBreaker,
+                configResolver,
+                relayMetrics,
+                properties,
+                new RoundRobinLoadBalancer(relayMetrics)
+        );
+        when(circuitBreaker.allowRequest(any(), any(EffectiveCircuitBreakerConfig.class))).thenReturn(true);
+        ObjectNode response = mapper.createObjectNode().put("ok", true);
+
+        ObjectNode actual = healthyFailoverService.executeWithFailoverMono(
+                provider -> Mono.just(response),
+                roundRobinGroup("healthy-rr-success"),
+                1000
+        ).block(Duration.ofSeconds(1));
+
+        assertEquals(response, actual);
+        verify(scoreCalculator).update(any(), eq(FailureType.SUCCESS), anyLong());
+        verify(circuitBreaker).onSuccess(any(), any(EffectiveCircuitBreakerConfig.class));
+    }
+
+    @Test
+    void healthyRoundRobinDoesNotConsumeHalfOpenProbeForUnselectedProvider() {
+        LuminaProperties properties = new LuminaProperties();
+        properties.getFailover().setRoundRobinMode(LuminaProperties.RoundRobinMode.HEALTHY);
+        CircuitBreakerConfig circuitBreakerConfig = new CircuitBreakerConfig();
+        ProviderStateRegistry providerStateRegistry = new ProviderStateRegistry(providerRuntimeStatsMapper, circuitBreakerConfig);
+        CircuitBreakerConfigResolver configResolver = new CircuitBreakerConfigResolver(circuitBreakerConfig);
+        FailoverService healthyFailoverService = new FailoverService(
+                providerStateRegistry,
+                scoreCalculator,
+                new CircuitBreaker(circuitBreakerConfig, new CircuitBreakerEventLogger(mapper)),
+                configResolver,
+                relayMetrics,
+                properties,
+                new RoundRobinLoadBalancer(relayMetrics)
+        );
+        ModelGroupConfig group = roundRobinGroup("healthy-rr-half-open-probe");
+        ModelGroupConfigItem halfOpenProvider = group.getItems().get(1);
+        ProviderRuntimeState halfOpenState = providerStateRegistry.get(ProviderIdGenerator.generate(halfOpenProvider));
+        halfOpenState.setCircuitState(CircuitState.HALF_OPEN);
+        halfOpenState.initHalfOpen(1);
+
+        ModelGroupConfigItem selected = healthyFailoverService.selectAvailableProvider(group);
+
+        assertEquals("provider-a", selected.getProviderName());
+        assertEquals(1, halfOpenState.getProbeRemaining().get());
     }
 
     private ModelGroupConfig roundRobinGroup(String id) {

@@ -3,10 +3,12 @@ package com.lumina.service;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.lumina.config.CircuitBreakerConfigResolver;
 import com.lumina.config.EffectiveCircuitBreakerConfig;
+import com.lumina.config.LuminaProperties;
 import com.lumina.dto.ModelGroupConfig;
 import com.lumina.dto.ModelGroupConfigItem;
 import com.lumina.exception.BulkheadFullException;
 import com.lumina.exception.MaxFailoverExceededException;
+import com.lumina.exception.NoHealthyProviderException;
 import com.lumina.metrics.RelayMetrics;
 import com.lumina.state.*;
 import lombok.RequiredArgsConstructor;
@@ -27,10 +29,8 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
@@ -42,9 +42,8 @@ public class FailoverService {
     private final CircuitBreaker circuitBreaker;
     private final CircuitBreakerConfigResolver configResolver;
     private final RelayMetrics relayMetrics;
-    private final com.lumina.config.LuminaProperties luminaProperties;
-
-    private final ConcurrentHashMap<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
+    private final LuminaProperties luminaProperties;
+    private final RoundRobinLoadBalancer roundRobinLoadBalancer;
 
     /**
      * 根据异常分类错误类型
@@ -136,9 +135,9 @@ public class FailoverService {
     }
 
     public ModelGroupConfigItem selectAvailableProvider(ModelGroupConfig modelGroupConfig, Set<String> excludeIds, int requestHash) {
-        // 轮询模式：直接轮询，不做熔断过滤
+        // 轮询模式：默认直接轮询，可配置为健康轮询以跳过熔断不可用 Provider
         if (isRoundRobinMode(modelGroupConfig)) {
-            return selectByRoundRobin(modelGroupConfig.getItems(), excludeIds, modelGroupConfig.getId());
+            return selectByRoundRobin(modelGroupConfig, excludeIds, requestHash);
         }
 
         // SAPR 模式（默认）
@@ -172,7 +171,7 @@ public class FailoverService {
             // 保底：降级到轮询，忽略 excludeIds，所有 Provider 都参与轮询
             log.warn("Group {} 所有 Provider 熔断或不可用，降级到轮询保底策略", modelGroupConfig.getId());
             relayMetrics.recordFallbackToRoundRobin();
-            return selectByRoundRobin(modelGroupConfig.getItems(), Collections.emptySet(), modelGroupConfig.getId());
+            return roundRobinLoadBalancer.select(modelGroupConfig.getItems(), Collections.emptySet(), modelGroupConfig.getId());
         }
 
         relayMetrics.recordSelection("sapr");
@@ -215,23 +214,62 @@ public class FailoverService {
         return topK.get(0);
     }
 
-    /**
-     * 轮询策略选择 Provider
-     */
-    private ModelGroupConfigItem selectByRoundRobin(List<ModelGroupConfigItem> items, Set<String> excludeIds, String groupId) {
-        List<ModelGroupConfigItem> candidates = items.stream()
-                .filter(item -> !excludeIds.contains(generateProviderId(item)))
-                .toList();
-
-        if (candidates.isEmpty()) {
-            throw new RuntimeException("所有 Provider 已尝试过，轮询无可用候选");
+    private ModelGroupConfigItem selectByRoundRobin(ModelGroupConfig modelGroupConfig, Set<String> excludeIds, int requestHash) {
+        if (luminaProperties.getFailover().getRoundRobinMode() == LuminaProperties.RoundRobinMode.HEALTHY) {
+            try {
+                return roundRobinLoadBalancer.selectAndReserve(
+                        modelGroupConfig.getItems(),
+                        excludeIds,
+                        modelGroupConfig.getId(),
+                        this::isRoundRobinCandidatePotentiallyHealthy,
+                        item -> reserveRoundRobinCandidate(modelGroupConfig, item, requestHash)
+                );
+            } catch (NoHealthyProviderException e) {
+                // 保底降级：全部 Provider 不健康时，镜像 SAPR 的降级策略，回退到无条件轮询
+                log.warn("Group {} 所有 Provider 熔断或不可用，降级到轮询保底策略", modelGroupConfig.getId());
+                relayMetrics.recordFallbackToRoundRobin();
+                return roundRobinLoadBalancer.select(
+                        modelGroupConfig.getItems(), Collections.emptySet(), modelGroupConfig.getId());
+            }
         }
 
-        String key = groupId != null ? groupId : "default";
-        AtomicInteger counter = roundRobinCounters.computeIfAbsent(key, k -> new AtomicInteger(0));
-        int index = Math.abs(counter.getAndIncrement() % candidates.size());
-        relayMetrics.recordSelection("round_robin");
-        return candidates.get(index);
+        return roundRobinLoadBalancer.select(modelGroupConfig.getItems(), excludeIds, modelGroupConfig.getId());
+    }
+
+    private boolean isRoundRobinCandidatePotentiallyHealthy(ModelGroupConfigItem item) {
+        ProviderRuntimeState stats = getOrInitProviderState(item);
+        CircuitState circuitState = stats.getCircuitState();
+        boolean potentiallyHealthy = switch (circuitState) {
+            case CLOSED, HALF_OPEN -> true;
+            case OPEN -> !stats.isManuallyControlled() && System.currentTimeMillis() >= stats.getNextProbeAt();
+        };
+
+        if (!potentiallyHealthy) {
+            relayMetrics.recordProviderSkipped("round_robin_circuit_" + circuitState.name().toLowerCase());
+        }
+        return potentiallyHealthy;
+    }
+
+    private boolean reserveRoundRobinCandidate(ModelGroupConfig group, ModelGroupConfigItem item, int requestHash) {
+        ProviderRuntimeState stats = getOrInitProviderState(item);
+
+        EffectiveCircuitBreakerConfig effectiveConfig = resolveConfig(group, item, requestHash);
+        boolean allowed = circuitBreaker.allowRequest(stats, effectiveConfig);
+        if (!allowed) {
+            relayMetrics.recordProviderSkipped("round_robin_circuit_" + stats.getCircuitState().name().toLowerCase());
+        }
+        return allowed;
+    }
+
+    private ProviderRuntimeState getOrInitProviderState(ModelGroupConfigItem item) {
+        ProviderRuntimeState stats = providerStateRegistry.get(generateProviderId(item));
+        if (stats.getProviderName() == null) {
+            stats.setProviderName(item.getProviderName());
+        }
+        if (stats.getModelName() == null) {
+            stats.setModelName(item.getModelName());
+        }
+        return stats;
     }
 
     private double getEffectiveScore(ProviderRuntimeState state) {
@@ -513,7 +551,10 @@ public class FailoverService {
     }
 
     private boolean shouldUpdateHealthState(ModelGroupConfig group) {
-        return !isRoundRobinMode(group);
+        if (!isRoundRobinMode(group)) {
+            return true;
+        }
+        return luminaProperties.getFailover().getRoundRobinMode() == LuminaProperties.RoundRobinMode.HEALTHY;
     }
 
     private boolean isRoundRobinMode(ModelGroupConfig group) {
