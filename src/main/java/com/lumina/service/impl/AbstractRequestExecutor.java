@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.lumina.converter.ProtocolType;
 import com.lumina.dto.ModelGroupConfigItem;
 import com.lumina.entity.LlmModel;
 import com.lumina.config.LuminaProperties;
@@ -16,6 +17,7 @@ import com.lumina.util.CostCalculator;
 import com.lumina.util.SnowflakeIdGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -23,13 +25,37 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 
 @Slf4j
 public abstract class AbstractRequestExecutor implements LlmRequestExecutor {
 
     private static final int MAX_ERROR_MESSAGE_LENGTH = 32_000;
+    private static final String ANTHROPIC_BETA_HEADER = "anthropic-beta";
+    private static final String ANTHROPIC_1M_CONTEXT_BETA = "context-1m-2025-08-07";
+    private static final Set<String> NON_PASSTHROUGH_REQUEST_HEADERS = Set.of(
+            "host",
+            "connection",
+            "content-length",
+            "accept-encoding",
+            "content-encoding",
+            "transfer-encoding",
+            "keep-alive",
+            "proxy-authenticate",
+            "proxy-authorization",
+            "te",
+            "trailer",
+            "upgrade"
+    );
+    private static final Set<String> MANAGED_AUTH_HEADERS = Set.of(
+            "authorization",
+            "x-api-key",
+            "api-key"
+    );
 
     @Autowired
     protected SnowflakeIdGenerator snowflakeIdGenerator;
@@ -292,6 +318,77 @@ public abstract class AbstractRequestExecutor implements LlmRequestExecutor {
         return providerWebClientFactory.getClient(provider);
     }
 
+    protected void applyPassthroughHeaders(HttpHeaders targetHeaders, HttpHeaders requestHeaders, ModelGroupConfigItem provider) {
+        if (requestHeaders != null) {
+            requestHeaders.forEach((headerName, values) -> {
+                if (!shouldPassthroughHeader(headerName)) {
+                    return;
+                }
+                targetHeaders.remove(headerName);
+                if (values != null) {
+                    values.forEach(value -> targetHeaders.add(headerName, value));
+                }
+            });
+        }
+        applyProviderAuthenticationHeaders(targetHeaders, provider);
+        applyProviderBetaHeaders(targetHeaders, provider);
+    }
+
+    private boolean shouldPassthroughHeader(String headerName) {
+        if (!StringUtils.hasText(headerName)) {
+            return false;
+        }
+        String normalized = headerName.toLowerCase(Locale.ROOT);
+        return !NON_PASSTHROUGH_REQUEST_HEADERS.contains(normalized)
+                && !MANAGED_AUTH_HEADERS.contains(normalized);
+    }
+
+    private void applyProviderAuthenticationHeaders(HttpHeaders targetHeaders, ModelGroupConfigItem provider) {
+        if (provider == null || !StringUtils.hasText(provider.getApiKey())) {
+            return;
+        }
+        targetHeaders.remove(HttpHeaders.AUTHORIZATION);
+        targetHeaders.remove("x-api-key");
+        targetHeaders.remove("api-key");
+
+        ProtocolType protocolType = ProtocolType.fromCode(provider.getProviderType());
+        if (protocolType == ProtocolType.ANTHROPIC) {
+            targetHeaders.set("x-api-key", provider.getApiKey());
+        } else {
+            targetHeaders.set(HttpHeaders.AUTHORIZATION, toAuthHeader(provider.getApiKey()));
+        }
+    }
+
+    private void applyProviderBetaHeaders(HttpHeaders targetHeaders, ModelGroupConfigItem provider) {
+        if (provider == null || !Boolean.TRUE.equals(provider.getBeta())) {
+            return;
+        }
+        ProtocolType protocolType = ProtocolType.fromCode(provider.getProviderType());
+        if (protocolType != ProtocolType.ANTHROPIC) {
+            return;
+        }
+        addHeaderValueIfMissing(targetHeaders, ANTHROPIC_BETA_HEADER, ANTHROPIC_1M_CONTEXT_BETA);
+    }
+
+    private void addHeaderValueIfMissing(HttpHeaders targetHeaders, String headerName, String requiredValue) {
+        java.util.List<String> values = targetHeaders.get(headerName);
+        if (values == null || values.isEmpty()) {
+            targetHeaders.set(headerName, requiredValue);
+            return;
+        }
+        boolean alreadyPresent = values.stream()
+                .flatMap(value -> java.util.Arrays.stream(value.split(",")))
+                .map(String::trim)
+                .anyMatch(value -> value.equalsIgnoreCase(requiredValue));
+        if (!alreadyPresent) {
+            targetHeaders.set(headerName, String.join(",", values) + "," + requiredValue);
+        }
+    }
+
+    private String toAuthHeader(String apiKey) {
+        return apiKey.startsWith("Bearer ") ? apiKey : "Bearer " + apiKey;
+    }
+
     protected void appendResponseChunk(RequestLogContext ctx, String data) {
         if (data == null) {
             return;
@@ -310,12 +407,40 @@ public abstract class AbstractRequestExecutor implements LlmRequestExecutor {
     }
 
     /**
-     * 应用超时到 Flux，如果 timeoutMs 有效
+     * 应用流式超时。分组超时同时约束首个事件和整段流总时长，后续事件间隔由 relay.streamIdleTimeoutMs 控制。
      */
-    protected <T> Flux<T> applyTimeout(Flux<T> flux, Integer timeoutMs) {
-        if (timeoutMs != null && timeoutMs > 0) {
-            return flux.timeout(Duration.ofMillis(timeoutMs));
+    protected <T> Flux<T> applyStreamTimeout(Flux<T> flux, Integer timeoutMs) {
+        int streamIdleTimeoutMs = luminaProperties.getRelay().getStreamIdleTimeoutMs();
+        boolean hasRequestTimeout = timeoutMs != null && timeoutMs > 0;
+        boolean hasIdleTimeout = streamIdleTimeoutMs > 0;
+
+        Flux<T> timedFlux = flux;
+        if (hasRequestTimeout && hasIdleTimeout) {
+            timedFlux = timedFlux.timeout(
+                    Duration.ofMillis(timeoutMs),
+                    ignored -> Mono.delay(Duration.ofMillis(streamIdleTimeoutMs))
+            );
+        } else if (hasRequestTimeout) {
+            timedFlux = timedFlux.timeout(
+                    Duration.ofMillis(timeoutMs),
+                    ignored -> Mono.never()
+            );
+        } else if (hasIdleTimeout) {
+            timedFlux = timedFlux.timeout(
+                    Mono.never(),
+                    ignored -> Mono.delay(Duration.ofMillis(streamIdleTimeoutMs))
+            );
         }
-        return flux;
+
+        if (!hasRequestTimeout) {
+            return timedFlux;
+        }
+
+        TimeoutException timeoutException = new TimeoutException(
+                "Stream request timed out after " + timeoutMs + "ms");
+        return timedFlux.takeUntilOther(
+                Mono.delay(Duration.ofMillis(timeoutMs))
+                        .then(Mono.error(timeoutException))
+        );
     }
 }

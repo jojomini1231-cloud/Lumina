@@ -37,6 +37,7 @@ public class WebClientConfig {
     public HttpClient relayHttpClient(ConnectionProvider relayConnectionProvider, LuminaProperties properties) {
         LuminaProperties.Relay relay = properties.getRelay();
         HttpClient httpClient = HttpClient.create(relayConnectionProvider)
+                .compress(true)
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, relay.getConnectTimeoutMs())
                 .responseTimeout(Duration.ofMillis(relay.getResponseTimeoutMs()))
                 .doOnConnected(conn -> conn

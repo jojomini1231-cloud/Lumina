@@ -2,6 +2,7 @@ package com.lumina.service;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.lumina.dto.ModelGroupConfigItem;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -16,6 +17,7 @@ public interface LlmRequestExecutor {
             ObjectNode request,
             ModelGroupConfigItem provider,
             Map<String, String> queryParams,
+            HttpHeaders requestHeaders,
             String modelAction,
             String type,
             Integer timeoutMs
@@ -25,6 +27,7 @@ public interface LlmRequestExecutor {
             ObjectNode request,
             ModelGroupConfigItem provider,
             Map<String, String> queryParams,
+            HttpHeaders requestHeaders,
             String modelAction,
             String type,
             Integer timeoutMs

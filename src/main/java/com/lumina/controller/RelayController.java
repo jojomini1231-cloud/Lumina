@@ -48,7 +48,7 @@ public class RelayController {
             ServerWebExchange exchange) {
         String apiKey = exchange.getAttribute("API_KEY");
         allParams.put("_lumina_request_ip", extractClientIp(exchange));
-        return relayService.relay("anthropic_messages", params, allParams, apiKey);
+        return relayService.relay("anthropic_messages", params, allParams, exchange.getRequest().getHeaders(), apiKey);
     }
 
 
@@ -62,7 +62,7 @@ public class RelayController {
             ServerWebExchange exchange) {
         String apiKey = exchange.getAttribute("API_KEY");
         allParams.put("_lumina_request_ip", extractClientIp(exchange));
-        return relayService.relay("openai_chat_completions", params, allParams, apiKey);
+        return relayService.relay("openai_chat_completions", params, allParams, exchange.getRequest().getHeaders(), apiKey);
     }
 
     @PostMapping(
@@ -75,7 +75,7 @@ public class RelayController {
             ServerWebExchange exchange) {
         String apiKey = exchange.getAttribute("API_KEY");
         allParams.put("_lumina_request_ip", extractClientIp(exchange));
-        return relayService.relay("openai_responses", params, allParams, apiKey);
+        return relayService.relay("openai_responses", params, allParams, exchange.getRequest().getHeaders(), apiKey);
     }
 
     @PostMapping(
@@ -88,7 +88,7 @@ public class RelayController {
             ServerWebExchange exchange) {
         String apiKey = exchange.getAttribute("API_KEY");
         allParams.put("_lumina_request_ip", extractClientIp(exchange));
-        return relayService.relay("openai_images_generations", params, allParams, apiKey);
+        return relayService.relay("openai_images_generations", params, allParams, exchange.getRequest().getHeaders(), apiKey);
     }
 
     @PostMapping(
@@ -102,7 +102,7 @@ public class RelayController {
             ServerWebExchange exchange) {
         String apiKey = exchange.getAttribute("API_KEY");
         allParams.put("_lumina_request_ip", extractClientIp(exchange));
-        return relayService.relay("gemini_models", modelAction, params, allParams, apiKey);
+        return relayService.relay("gemini_models", modelAction, params, allParams, exchange.getRequest().getHeaders(), apiKey);
     }
 
     @PostMapping(

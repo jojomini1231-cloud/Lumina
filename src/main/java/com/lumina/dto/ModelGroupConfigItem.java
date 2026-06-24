@@ -22,6 +22,8 @@ public class ModelGroupConfigItem {
 
     private Integer providerType;
 
+    private Boolean beta;
+
     /** 供应商支持的所有协议类型，逗号分隔，如 "0,2" */
     private String supportedTypes;
 

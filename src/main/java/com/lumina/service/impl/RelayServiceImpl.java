@@ -19,6 +19,7 @@ import com.lumina.service.LlmRequestExecutor;
 import com.lumina.service.RelayService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.ServerSentEvent;
@@ -62,7 +63,7 @@ public class RelayServiceImpl implements RelayService {
     }
 
     @Override
-    public Mono<ResponseEntity<?>> relay(String type, ObjectNode params, Map<String, String> queryParams, String apiKey) {
+    public Mono<ResponseEntity<?>> relay(String type, ObjectNode params, Map<String, String> queryParams, HttpHeaders requestHeaders, String apiKey) {
         String modelGroupName = params.get("model").asText();
         log.debug("Relaying request for model group: {}", modelGroupName);
         Map<String, String> enrichedParams = new java.util.HashMap<>(queryParams);
@@ -109,7 +110,7 @@ public class RelayServiceImpl implements RelayService {
                                     }
 
                                     Flux<ServerSentEvent<String>> upstream = executor.executeStream(
-                                            finalRequest, provider, execParams, "", executorType, timeoutMs
+                                            finalRequest, provider, execParams, requestHeaders, "", executorType, timeoutMs
                                     );
 
                                     return converter.map(c -> c.convertStreamResponse(upstream)).orElse(upstream);
@@ -144,7 +145,7 @@ public class RelayServiceImpl implements RelayService {
                                 }
 
                                 return executor.executeNormal(
-                                        finalRequest, provider, execParams, "", executorType, timeoutMs
+                                        finalRequest, provider, execParams, requestHeaders, "", executorType, timeoutMs
                                 ).map(resp -> converter.map(c -> c.convertResponse(resp)).orElse(resp));
                             },
                             modelGroupConfig,
@@ -154,7 +155,7 @@ public class RelayServiceImpl implements RelayService {
     }
 
     @Override
-    public Mono<ResponseEntity<?>> relay(String type, String modelAction, ObjectNode params, Map<String, String> queryParams, String apiKey) {
+    public Mono<ResponseEntity<?>> relay(String type, String modelAction, ObjectNode params, Map<String, String> queryParams, HttpHeaders requestHeaders, String apiKey) {
         String[] parts = modelAction.split(":", 2);
         String modelGroupName = parts[0];
         String action = parts.length > 1 ? parts[1] : "";
@@ -183,6 +184,7 @@ public class RelayServiceImpl implements RelayService {
                                             requestParams,
                                             provider,
                                             enrichedParams,
+                                            requestHeaders,
                                             provider.getModelName() + ":" + action,
                                             type,
                                             timeoutMs
@@ -204,6 +206,7 @@ public class RelayServiceImpl implements RelayService {
                                         requestParams,
                                         provider,
                                         enrichedParams,
+                                        requestHeaders,
                                         provider.getModelName() + ":" + action,
                                         type,
                                         timeoutMs

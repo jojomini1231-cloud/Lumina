@@ -6,6 +6,7 @@ import com.lumina.dto.ModelGroupConfigItem;
 import com.lumina.logging.RequestLogContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
@@ -33,7 +34,7 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
     }
 
     @Override
-    public Mono<ObjectNode> executeNormal(ObjectNode request, ModelGroupConfigItem provider, Map<String, String> queryParams, String modelAction, String type, Integer timeoutMs) {
+    public Mono<ObjectNode> executeNormal(ObjectNode request, ModelGroupConfigItem provider, Map<String, String> queryParams, HttpHeaders requestHeaders, String modelAction, String type, Integer timeoutMs) {
         prepareRequestForProvider(request, provider, type);
         logRelayRequest(request, provider, type, false);
         RequestLogContext ctx = createLogContext(request, provider, type, false, queryParams);
@@ -43,6 +44,7 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
                     applyQueryParams(uriBuilder, queryParams);
                     return uriBuilder.build();
                 })
+                .headers(headers -> applyPassthroughHeaders(headers, requestHeaders, provider))
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
@@ -65,7 +67,7 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
     }
 
     @Override
-    public Flux<ServerSentEvent<String>> executeStream(ObjectNode request, ModelGroupConfigItem provider, Map<String, String> queryParams, String modelAction, String type, Integer timeoutMs) {
+    public Flux<ServerSentEvent<String>> executeStream(ObjectNode request, ModelGroupConfigItem provider, Map<String, String> queryParams, HttpHeaders requestHeaders, String modelAction, String type, Integer timeoutMs) {
         prepareRequestForProvider(request, provider, type);
         logRelayRequest(request, provider, type, true);
         RequestLogContext ctx = createLogContext(request, provider, type, true, queryParams);
@@ -75,6 +77,7 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
                     applyQueryParams(uriBuilder, queryParams);
                     return uriBuilder.build();
                 })
+                .headers(headers -> applyPassthroughHeaders(headers, requestHeaders, provider))
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.TEXT_EVENT_STREAM)
                 .bodyValue(request).retrieve()
@@ -87,7 +90,7 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
                                 }))
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {});
 
-        return applyTimeout(result, timeoutMs)
+        return applyStreamTimeout(result, timeoutMs)
                 .doOnNext(event -> {
                     String data = event.data();
                     if (data == null) return;
@@ -104,14 +107,7 @@ public class OpenAiRequestExecutor extends AbstractRequestExecutor {
                         recordSuccess(ctx, ctx.getResponseBuffer().toString());
                     }
                 })
-                .onErrorResume(err -> {
-                    recordError(ctx, err);
-                    String errorMessage = "{\"error\": {\"message\": \"网关传输中途发生网络异常中断，请稍后重试。\"}}";
-                    return Flux.just(ServerSentEvent.<String>builder()
-                            .data(errorMessage)
-                            .build())
-                            .concatWith(Flux.error(err));
-                })
+                .doOnError(err -> recordError(ctx, err))
                 .doOnComplete(() -> recordSuccess(ctx, ctx.getResponseBuffer().toString()))
                 .doFinally(signalType -> {
                     if (signalType == SignalType.CANCEL) {

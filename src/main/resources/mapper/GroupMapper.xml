@@ -15,6 +15,7 @@
             <result column="api_key" property="apiKey"/>
             <result column="base_url" property="baseUrl"/>
             <result column="provider_type" property="providerType"/>
+            <result column="provider_beta" property="beta"/>
             <result column="supported_types" property="supportedTypes"/>
             <result column="endpoints_json" property="endpointsJson"/>
         </collection>
@@ -46,6 +47,7 @@
                p.id AS provider_id,
                p.`name` AS provider_name,
                COALESCE(mgi.protocol_type, CAST(SUBSTRING_INDEX(p.type, ',', 1) AS UNSIGNED)) AS provider_type,
+               p.beta AS provider_beta,
                p.type AS supported_types,
                (SELECT CONCAT('{', GROUP_CONCAT(
                    CONCAT('"', pep.protocol_type, '":"', REPLACE(pep.base_url, '"', '\\"'), '"')
@@ -73,6 +75,7 @@
                p.id AS provider_id,
                p.`name` AS provider_name,
                COALESCE(mgi.protocol_type, CAST(SUBSTR(p.type, 1, INSTR(p.type || ',', ',') - 1) AS INTEGER)) AS provider_type,
+               p.beta AS provider_beta,
                p.type AS supported_types,
                (SELECT '{' || GROUP_CONCAT(
                    '"' || pep.protocol_type || '":"' || REPLACE(pep.base_url, '"', '\"') || '"')

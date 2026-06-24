@@ -5,6 +5,7 @@ import com.lumina.dto.ModelGroupConfigItem;
 import com.lumina.logging.RequestLogContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
@@ -24,7 +25,7 @@ public class AnthropicRequestExecutor extends AbstractRequestExecutor {
     }
 
     @Override
-    public Mono<ObjectNode> executeNormal(ObjectNode request, ModelGroupConfigItem provider, Map<String, String> queryParams, String modelAction, String type, Integer timeoutMs) {
+    public Mono<ObjectNode> executeNormal(ObjectNode request, ModelGroupConfigItem provider, Map<String, String> queryParams, HttpHeaders requestHeaders, String modelAction, String type, Integer timeoutMs) {
         RequestLogContext ctx = createLogContext(request, provider, type, false, queryParams);
         Mono<ObjectNode> result = createWebClient(provider).post()
                 .uri(uriBuilder -> {
@@ -32,6 +33,7 @@ public class AnthropicRequestExecutor extends AbstractRequestExecutor {
                     applyQueryParams(uriBuilder, queryParams);
                     return uriBuilder.build();
                 })
+                .headers(headers -> applyPassthroughHeaders(headers, requestHeaders, provider))
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
@@ -47,7 +49,7 @@ public class AnthropicRequestExecutor extends AbstractRequestExecutor {
     }
 
     @Override
-    public Flux<ServerSentEvent<String>> executeStream(ObjectNode request, ModelGroupConfigItem provider, Map<String, String> queryParams, String modelAction, String type, Integer timeoutMs) {
+    public Flux<ServerSentEvent<String>> executeStream(ObjectNode request, ModelGroupConfigItem provider, Map<String, String> queryParams, HttpHeaders requestHeaders, String modelAction, String type, Integer timeoutMs) {
         log.debug("Anthropic stream request: provider={}, model={}", provider.getProviderName(), provider.getModelName());
         RequestLogContext ctx = createLogContext(request, provider, type, true, queryParams);
         Flux<ServerSentEvent<String>> result = createWebClient(provider).post()
@@ -56,6 +58,7 @@ public class AnthropicRequestExecutor extends AbstractRequestExecutor {
                     applyQueryParams(uriBuilder, queryParams);
                     return uriBuilder.build();
                 })
+                .headers(headers -> applyPassthroughHeaders(headers, requestHeaders, provider))
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.TEXT_EVENT_STREAM)
                 .bodyValue(request)
@@ -63,7 +66,7 @@ public class AnthropicRequestExecutor extends AbstractRequestExecutor {
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
                 });
 
-        return applyTimeout(result, timeoutMs)
+        return applyStreamTimeout(result, timeoutMs)
                 .doOnNext(event -> {
                     String data = event.data();
                     if (data == null) return;

@@ -117,6 +117,7 @@ public class LuminaProperties {
         private int pendingAcquireTimeoutMs = 3000;
         private int connectTimeoutMs = 5000;
         private int responseTimeoutMs = 600000;
+        private int streamIdleTimeoutMs = 600000;
         private int maxIdleTimeSeconds = 60;
         private int maxLifeTimeSeconds = 300;
         private int maxInMemorySizeMb = 100;
