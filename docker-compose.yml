@@ -11,6 +11,8 @@ services:
         max-size: "50m"
         max-file: "5"
     environment:
+      TZ: Asia/Shanghai
+      JAVA_OPTS: "-Duser.timezone=Asia/Shanghai"
       # 使用宿主机本地 MySQL。由于本机 MySQL 只监听 127.0.0.1，
       # 这里使用 host 网络，让容器内的 127.0.0.1 指向宿主机。
       SPRING_DATASOURCE_DRIVER: com.mysql.cj.jdbc.Driver

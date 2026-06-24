@@ -20,7 +20,9 @@ FROM eclipse-temurin:17-jre-alpine
 LABEL version="0.4.0"
 LABEL description="Lumina - High-performance LLM API Gateway"
 WORKDIR /app
-RUN apk add --no-cache redis dos2unix
+RUN apk add --no-cache redis dos2unix tzdata
+ENV TZ=Asia/Shanghai
+ENV JAVA_OPTS="-Duser.timezone=Asia/Shanghai"
 COPY --from=build /app/target/*.jar app.jar
 COPY startup.sh ./
 RUN dos2unix startup.sh && chmod +x startup.sh
