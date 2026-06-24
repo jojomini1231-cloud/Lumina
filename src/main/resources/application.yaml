@@ -142,8 +142,8 @@ logging:
     io.netty: WARN
     org.apache.catalina: WARN
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss, Asia/Shanghai} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss, Asia/Shanghai} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: logs/lumina.log
     max-size: 100MB
@@ -217,6 +217,18 @@ lumina:
   api:
     version: v1
     prefix: /api/v1
+
+  # Relay HTTP 客户端配置
+  relay:
+    max-connections: ${LUMINA_RELAY_MAX_CONNECTIONS:200}
+    pending-acquire-max-count: ${LUMINA_RELAY_PENDING_ACQUIRE_MAX_COUNT:1000}
+    pending-acquire-timeout-ms: ${LUMINA_RELAY_PENDING_ACQUIRE_TIMEOUT_MS:3000}
+    connect-timeout-ms: ${LUMINA_RELAY_CONNECT_TIMEOUT_MS:5000}
+    response-timeout-ms: ${LUMINA_RELAY_RESPONSE_TIMEOUT_MS:600000}
+    stream-idle-timeout-ms: ${LUMINA_RELAY_STREAM_IDLE_TIMEOUT_MS:600000}
+    max-idle-time-seconds: ${LUMINA_RELAY_MAX_IDLE_TIME_SECONDS:60}
+    max-life-time-seconds: ${LUMINA_RELAY_MAX_LIFE_TIME_SECONDS:300}
+    max-in-memory-size-mb: ${LUMINA_RELAY_MAX_IN_MEMORY_SIZE_MB:100}
 
   # 日志链路配置
   logging:
