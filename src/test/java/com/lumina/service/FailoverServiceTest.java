@@ -23,11 +23,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.codec.ServerSentEvent;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -250,6 +253,63 @@ class FailoverServiceTest {
 
         assertEquals("provider-a", selected.getProviderName());
         assertEquals(1, halfOpenState.getProbeRemaining().get());
+    }
+
+    @Test
+    void streamErrorBeforeFirstChunkFailsOverToNextProvider() {
+        AtomicInteger calls = new AtomicInteger();
+        List<String> providerNames = new ArrayList<>();
+
+        List<ServerSentEvent<String>> events = failoverService.executeWithFailoverFlux(
+                provider -> {
+                    providerNames.add(provider.getProviderName());
+                    if (calls.getAndIncrement() == 0) {
+                        return Flux.error(new RuntimeException("first provider failed before first chunk"));
+                    }
+                    return Flux.just(ServerSentEvent.<String>builder()
+                            .data("{\"provider\":\"" + provider.getProviderName() + "\"}")
+                            .build());
+                },
+                roundRobinGroup("rr-stream-first-chunk-failover"),
+                1000
+        ).collectList().block(Duration.ofSeconds(1));
+
+        assertEquals(List.of("provider-a", "provider-b"), providerNames);
+        assertEquals(1, events.size());
+        assertEquals("{\"provider\":\"provider-b\"}", events.get(0).data());
+    }
+
+    @Test
+    void streamErrorAfterFirstChunkDoesNotFailOver() {
+        List<String> providerNames = new ArrayList<>();
+
+        Flux<ServerSentEvent<String>> result = failoverService.executeWithFailoverFlux(
+                provider -> {
+                    providerNames.add(provider.getProviderName());
+                    return Flux.just(ServerSentEvent.<String>builder()
+                                    .data("{\"content\":\"partial\"}")
+                                    .build())
+                            .concatWith(Flux.error(new RuntimeException("midstream failed")));
+                },
+                roundRobinGroup("rr-stream-midstream-failure"),
+                1000
+        );
+
+        List<ServerSentEvent<String>> events = new ArrayList<>();
+        AtomicReference<Throwable> errorRef = new AtomicReference<>();
+        result.doOnNext(events::add)
+                .doOnError(errorRef::set)
+                .onErrorResume(error -> Mono.empty())
+                .then()
+                .block(Duration.ofSeconds(1));
+
+        assertEquals(List.of("provider-a"), providerNames);
+        assertEquals(2, events.size());
+        assertEquals("{\"content\":\"partial\"}", events.get(0).data());
+        org.junit.jupiter.api.Assertions.assertNotNull(errorRef.get());
+        assertEquals("midstream failed", errorRef.get().getMessage());
+        org.junit.jupiter.api.Assertions.assertTrue(events.get(1).data() != null
+                && events.get(1).data().contains("网关传输中途发生网络异常中断"));
     }
 
     private ModelGroupConfig roundRobinGroup(String id) {
