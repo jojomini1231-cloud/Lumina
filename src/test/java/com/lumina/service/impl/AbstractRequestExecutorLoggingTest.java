@@ -1,6 +1,7 @@
 package com.lumina.service.impl;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.lumina.config.LuminaProperties;
 import com.lumina.dto.ModelGroupConfigItem;
 import com.lumina.logging.LogWriter;
 import com.lumina.logging.RequestLogContext;
@@ -15,9 +16,13 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -35,6 +40,7 @@ class AbstractRequestExecutorLoggingTest {
         logWriter = mock(LogWriter.class);
         executor.logWriter = logWriter;
         executor.snowflakeIdGenerator = new SnowflakeIdGenerator(0, 0);
+        executor.luminaProperties = new LuminaProperties();
     }
 
     @Test
@@ -137,6 +143,18 @@ class AbstractRequestExecutorLoggingTest {
         assertEquals(upstreamResponse, ctx.getResponseContent());
     }
 
+    @Test
+    void streamTimeoutCapsTotalDurationEvenWhenChunksContinue() {
+        executor.luminaProperties.getRelay().setStreamIdleTimeoutMs(1000);
+        Flux<Long> source = Flux.interval(Duration.ofMillis(5));
+
+        RuntimeException error = assertThrows(RuntimeException.class,
+                () -> executor.applyStreamTimeoutForTest(source, 30).blockLast());
+
+        assertInstanceOf(TimeoutException.class, error.getCause());
+        assertTrue(error.getCause().getMessage().contains("30ms"));
+    }
+
     private RequestLogContext context() {
         RequestLogContext ctx = new RequestLogContext();
         ctx.setStartNano(System.nanoTime());
@@ -151,16 +169,22 @@ class AbstractRequestExecutorLoggingTest {
 
         @Override
         public Mono<ObjectNode> executeNormal(ObjectNode request, ModelGroupConfigItem provider,
-                                              Map<String, String> queryParams, String modelAction,
+                                              Map<String, String> queryParams, HttpHeaders requestHeaders,
+                                              String modelAction,
                                               String type, Integer timeoutMs) {
             return Mono.empty();
         }
 
         @Override
         public Flux<ServerSentEvent<String>> executeStream(ObjectNode request, ModelGroupConfigItem provider,
-                                                           Map<String, String> queryParams, String modelAction,
+                                                           Map<String, String> queryParams, HttpHeaders requestHeaders,
+                                                           String modelAction,
                                                            String type, Integer timeoutMs) {
             return Flux.empty();
+        }
+
+        <T> Flux<T> applyStreamTimeoutForTest(Flux<T> flux, Integer timeoutMs) {
+            return applyStreamTimeout(flux, timeoutMs);
         }
     }
 }
