@@ -44,6 +44,29 @@ class OpenAiChatToAnthropicConverterTest {
     }
 
     @Test
+    void convertResponseMapsAnthropicUsageTotalFromOutputTokens() throws Exception {
+        ObjectNode response = (ObjectNode) mapper.readTree("""
+                {
+                  "id": "msg_1",
+                  "model": "claude-sonnet-4-5",
+                  "content": [{"type": "text", "text": "Done."}],
+                  "stop_reason": "end_turn",
+                  "usage": {
+                    "input_tokens": 7,
+                    "output_tokens": 5
+                  }
+                }
+                """);
+
+        ObjectNode converted = converter.convertResponse(response);
+        JsonNode usage = converted.get("usage");
+
+        assertEquals(7, usage.get("prompt_tokens").asInt());
+        assertEquals(5, usage.get("completion_tokens").asInt());
+        assertEquals(12, usage.get("total_tokens").asInt());
+    }
+
+    @Test
     void streamResponseKeepsToolArgumentDeltasOnTheirOwnToolCallIndexes() throws Exception {
         List<ServerSentEvent<String>> events = converter.convertStreamResponse(Flux.just(
                 sse("{\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-5\"}}"),

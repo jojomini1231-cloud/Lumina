@@ -63,6 +63,10 @@ public class FailoverService {
             return FailureType.TIMEOUT;
         }
 
+        if (isPrematureClose(throwable)) {
+            return FailureType.CONNECT;
+        }
+
         if (cause instanceof ConnectException) {
             return FailureType.CONNECT;
         }
@@ -527,20 +531,38 @@ public class FailoverService {
                         relayMetrics.recordFailoverAttempt(true, attemptCount + 1);
                         return executeWithFailoverFlux(callFunction, group, tried, timeoutMs, attemptCount + 1, requestHash);
                     } else {
-                        log.error("Provider {} 流式传输中途失败: {} (类型: {})", providerId, error.getMessage(), failureType);
+                        log.warn("Provider {} 流式传输中途失败: {} (类型: {})", providerId, error.getMessage(), failureType);
                         if (updateHealthState) {
                             scoreCalculator.update(state, failureType, duration);
                             circuitBreaker.onFailure(state, failureType, effectiveConfig);
                         }
                         relayMetrics.recordFailoverDepth(attemptCount);
-                        // 中断传输的降级提示
+                        // 已经向客户端输出过流式内容，不能切换 Provider；发送可解释事件后正常收尾，避免异常继续冒泡到全局处理器。
                         String errorMessage = "{\"error\": {\"message\": \"网关传输中途发生网络异常中断，请稍后重试。\"}}";
-                        return Flux.just(ServerSentEvent.<String>builder()
-                                .data(errorMessage)
-                                .build())
-                                .concatWith(Flux.error(error));
+                        return Flux.just(
+                                ServerSentEvent.<String>builder()
+                                        .data(errorMessage)
+                                        .build(),
+                                ServerSentEvent.<String>builder()
+                                        .data("[DONE]")
+                                        .build()
+                        );
                     }
                 });
+    }
+
+    private boolean isPrematureClose(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String className = current.getClass().getName();
+            String message = current.getMessage();
+            if ("reactor.netty.http.client.PrematureCloseException".equals(className)
+                    || (message != null && message.contains("Connection prematurely closed"))) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private String generateProviderId(ModelGroupConfigItem item) {

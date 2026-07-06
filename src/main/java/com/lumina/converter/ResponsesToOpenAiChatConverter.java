@@ -321,30 +321,41 @@ public class ResponsesToOpenAiChatConverter implements ProtocolConverter {
 
     @Override
     public Flux<ServerSentEvent<String>> convertStreamResponse(Flux<ServerSentEvent<String>> upstream) {
-        String responseId = "resp_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 24);
-        java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
-        java.util.concurrent.atomic.AtomicInteger outputIndex = new java.util.concurrent.atomic.AtomicInteger(0);
-        java.util.concurrent.atomic.AtomicInteger textOutputIndex = new java.util.concurrent.atomic.AtomicInteger(-1);
-        StringBuilder fullText = new StringBuilder();
-        // 跟踪每个 tool_call 的状态: index → {id, name, arguments}
-        java.util.concurrent.ConcurrentHashMap<Integer, ToolCallState> toolCallStates = new java.util.concurrent.ConcurrentHashMap<>();
-        ReasoningState reasoningState = new ReasoningState();
-        java.util.concurrent.atomic.AtomicBoolean hasTextOutput = new java.util.concurrent.atomic.AtomicBoolean(false);
-        java.util.concurrent.atomic.AtomicBoolean textItemStarted = new java.util.concurrent.atomic.AtomicBoolean(false);
+        return Flux.defer(() -> {
+            String responseId = "resp_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 24);
+            java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
+            java.util.concurrent.atomic.AtomicBoolean completed = new java.util.concurrent.atomic.AtomicBoolean(false);
+            java.util.concurrent.atomic.AtomicInteger outputIndex = new java.util.concurrent.atomic.AtomicInteger(0);
+            java.util.concurrent.atomic.AtomicInteger textOutputIndex = new java.util.concurrent.atomic.AtomicInteger(-1);
+            StringBuilder fullText = new StringBuilder();
+            // 跟踪每个 tool_call 的状态: index → {id, name, arguments}
+            java.util.concurrent.ConcurrentHashMap<Integer, ToolCallState> toolCallStates = new java.util.concurrent.ConcurrentHashMap<>();
+            ReasoningState reasoningState = new ReasoningState();
+            java.util.concurrent.atomic.AtomicBoolean hasTextOutput = new java.util.concurrent.atomic.AtomicBoolean(false);
+            java.util.concurrent.atomic.AtomicBoolean textItemStarted = new java.util.concurrent.atomic.AtomicBoolean(false);
+            ObjectNode[] latestUsage = new ObjectNode[1];
 
-        return upstream.flatMapIterable(event -> {
-            String data = event.data();
-            if (data == null || data.isBlank()) return java.util.Collections.<ServerSentEvent<String>>emptyList();
-
-            if ("[DONE]".equals(data)) {
+            java.util.function.Supplier<java.util.List<ServerSentEvent<String>>> complete = () -> {
+                if (!started.get() || !completed.compareAndSet(false, true)) {
+                    return java.util.Collections.emptyList();
+                }
                 return buildDoneEvents(
                         responseId,
                         fullText,
                         hasTextOutput.get(),
                         textOutputIndex.get(),
                         toolCallStates,
-                        reasoningState
+                        reasoningState,
+                        latestUsage[0]
                 );
+            };
+
+            return upstream.flatMapIterable(event -> {
+            String data = event.data();
+            if (data == null || data.isBlank()) return java.util.Collections.<ServerSentEvent<String>>emptyList();
+
+            if ("[DONE]".equals(data)) {
+                return complete.get();
             }
 
             try {
@@ -353,6 +364,10 @@ public class ResponsesToOpenAiChatConverter implements ProtocolConverter {
 
                 if (!started.getAndSet(true)) {
                     events.addAll(buildStartEvents(responseId));
+                }
+
+                if (node.has("usage") && !node.get("usage").isNull()) {
+                    latestUsage[0] = convertChatUsageToResponsesUsage(node.get("usage"));
                 }
 
                 if (node.has("choices") && node.get("choices").isArray()) {
@@ -435,6 +450,15 @@ public class ResponsesToOpenAiChatConverter implements ProtocolConverter {
                                     itemObj.put("arguments", "");
                                     itemAdded.set("item", itemObj);
                                     events.add(sse("response.output_item.added", itemAdded.toString()));
+
+                                    if (state.arguments.length() > 0) {
+                                        ObjectNode argEvent = mapper.createObjectNode();
+                                        argEvent.put("type", "response.function_call_arguments.delta");
+                                        argEvent.put("item_id", state.itemId);
+                                        argEvent.put("output_index", state.outputIndex);
+                                        argEvent.put("delta", state.arguments.toString());
+                                        events.add(sse("response.function_call_arguments.delta", argEvent.toString()));
+                                    }
                                 }
 
                                 // arguments delta
@@ -443,12 +467,14 @@ public class ResponsesToOpenAiChatConverter implements ProtocolConverter {
                                     if (argDelta != null && !argDelta.isEmpty()) {
                                         state.arguments.append(argDelta);
 
-                                        ObjectNode argEvent = mapper.createObjectNode();
-                                        argEvent.put("type", "response.function_call_arguments.delta");
-                                        argEvent.put("item_id", state.itemId != null ? state.itemId : "fc_" + tcIndex);
-                                        argEvent.put("output_index", state.outputIndex);
-                                        argEvent.put("delta", argDelta);
-                                        events.add(sse("response.function_call_arguments.delta", argEvent.toString()));
+                                        if (state.started) {
+                                            ObjectNode argEvent = mapper.createObjectNode();
+                                            argEvent.put("type", "response.function_call_arguments.delta");
+                                            argEvent.put("item_id", state.itemId);
+                                            argEvent.put("output_index", state.outputIndex);
+                                            argEvent.put("delta", argDelta);
+                                            events.add(sse("response.function_call_arguments.delta", argEvent.toString()));
+                                        }
                                     }
                                 }
                             }
@@ -460,6 +486,7 @@ public class ResponsesToOpenAiChatConverter implements ProtocolConverter {
                 log.debug("Failed to parse OpenAI Chat stream event: {}", data);
                 return java.util.Collections.<ServerSentEvent<String>>emptyList();
             }
+            }).concatWith(Flux.defer(() -> Flux.fromIterable(complete.get())));
         });
     }
 
@@ -532,7 +559,8 @@ public class ResponsesToOpenAiChatConverter implements ProtocolConverter {
     private java.util.List<ServerSentEvent<String>> buildDoneEvents(
             String responseId, StringBuilder fullText, boolean hasText, int textOutputIdx,
             java.util.concurrent.ConcurrentHashMap<Integer, ToolCallState> toolCallStates,
-            ReasoningState reasoningState) {
+            ReasoningState reasoningState,
+            ObjectNode usage) {
 
         java.util.List<ServerSentEvent<String>> endEvents = new java.util.ArrayList<>();
 
@@ -588,7 +616,7 @@ public class ResponsesToOpenAiChatConverter implements ProtocolConverter {
         }
 
         // 关闭每个 tool_call output item
-        for (ToolCallState state : toolCallStates.values()) {
+        for (ToolCallState state : new java.util.TreeMap<>(toolCallStates).values()) {
             if (!state.started) continue;
 
             // function_call_arguments.done
@@ -621,10 +649,24 @@ public class ResponsesToOpenAiChatConverter implements ProtocolConverter {
         respObj.put("id", responseId);
         respObj.put("object", "response");
         respObj.put("status", "completed");
+        if (usage != null) {
+            respObj.set("usage", usage);
+        }
         completed.set("response", respObj);
         endEvents.add(sse("response.completed", completed.toString()));
 
         return endEvents;
+    }
+
+    private ObjectNode convertChatUsageToResponsesUsage(JsonNode usage) {
+        ObjectNode respUsage = mapper.createObjectNode();
+        int inputTokens = usage.path("prompt_tokens").asInt(0);
+        int outputTokens = usage.path("completion_tokens").asInt(0);
+        int totalTokens = usage.has("total_tokens") ? usage.get("total_tokens").asInt() : inputTokens + outputTokens;
+        respUsage.put("input_tokens", inputTokens);
+        respUsage.put("output_tokens", outputTokens);
+        respUsage.put("total_tokens", totalTokens);
+        return respUsage;
     }
 
     private ServerSentEvent<String> sse(String eventType, String data) {

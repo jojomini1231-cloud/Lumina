@@ -385,7 +385,7 @@ public class OpenAiChatToAnthropicConverter implements ProtocolConverter {
             openAiUsage.put("completion_tokens", usage.has("output_tokens") ? usage.get("output_tokens").asInt() : 0);
             openAiUsage.put("total_tokens",
                     (usage.has("input_tokens") ? usage.get("input_tokens").asInt() : 0) +
-                    (usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0));
+                    (usage.has("output_tokens") ? usage.get("output_tokens").asInt() : 0));
             result.set("usage", openAiUsage);
         }
 
@@ -395,16 +395,17 @@ public class OpenAiChatToAnthropicConverter implements ProtocolConverter {
     // ==================== 流式转换: Anthropic Stream → OpenAI Chat Stream ====================
 
     private Flux<ServerSentEvent<String>> convertAnthropicStreamToOpenAiChat(Flux<ServerSentEvent<String>> upstream) {
-        String chatId = "chatcmpl-" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
-        AtomicBoolean sentRole = new AtomicBoolean(false);
-        AtomicInteger toolCallIndex = new AtomicInteger(-1);
-        // 跟踪当前 content_block 类型: text 或 tool_use
-        ConcurrentHashMap<Integer, String> blockTypes = new ConcurrentHashMap<>();
-        ConcurrentHashMap<Integer, String> toolCallIds = new ConcurrentHashMap<>();
-        ConcurrentHashMap<Integer, String> toolCallNames = new ConcurrentHashMap<>();
-        ConcurrentHashMap<Integer, Integer> blockToToolCallIndex = new ConcurrentHashMap<>();
+        return Flux.defer(() -> {
+            String chatId = "chatcmpl-" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
+            AtomicBoolean sentRole = new AtomicBoolean(false);
+            AtomicInteger toolCallIndex = new AtomicInteger(-1);
+            // 跟踪当前 content_block 类型: text 或 tool_use
+            ConcurrentHashMap<Integer, String> blockTypes = new ConcurrentHashMap<>();
+            ConcurrentHashMap<Integer, String> toolCallIds = new ConcurrentHashMap<>();
+            ConcurrentHashMap<Integer, String> toolCallNames = new ConcurrentHashMap<>();
+            ConcurrentHashMap<Integer, Integer> blockToToolCallIndex = new ConcurrentHashMap<>();
 
-        return upstream.flatMapIterable(event -> {
+            return upstream.flatMapIterable(event -> {
             String data = event.data();
             if (data == null || data.isBlank()) return Collections.<ServerSentEvent<String>>emptyList();
 
@@ -483,6 +484,7 @@ public class OpenAiChatToAnthropicConverter implements ProtocolConverter {
                 log.debug("Failed to parse Anthropic stream event: {}", data);
                 return Collections.<ServerSentEvent<String>>emptyList();
             }
+            });
         });
     }
 
@@ -574,6 +576,8 @@ public class OpenAiChatToAnthropicConverter implements ProtocolConverter {
         ObjectNode chunk = mapper.createObjectNode();
         chunk.put("id", id);
         chunk.put("object", "chat.completion.chunk");
+        chunk.put("created", System.currentTimeMillis() / 1000);
+        chunk.set("choices", mapper.createArrayNode());
         ObjectNode openAiUsage = mapper.createObjectNode();
         openAiUsage.put("prompt_tokens", usage.has("input_tokens") ? usage.get("input_tokens").asInt() : 0);
         openAiUsage.put("completion_tokens", usage.has("output_tokens") ? usage.get("output_tokens").asInt() : 0);

@@ -241,13 +241,17 @@ public class OpenAiChatToResponsesConverter implements ProtocolConverter {
 
     @Override
     public Flux<ServerSentEvent<String>> convertStreamResponse(Flux<ServerSentEvent<String>> upstream) {
-        String chatId = "chatcmpl-" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
-        AtomicBoolean sentRole = new AtomicBoolean(false);
-        // 跟踪 function_call 的 tool_calls index
-        ConcurrentHashMap<String, Integer> itemIdToToolCallIndex = new ConcurrentHashMap<>();
-        AtomicInteger toolCallCounter = new AtomicInteger(0);
+        return Flux.defer(() -> {
+            String chatId = "chatcmpl-" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
+            AtomicBoolean sentRole = new AtomicBoolean(false);
+            AtomicBoolean completed = new AtomicBoolean(false);
+            // 跟踪 function_call 的 tool_calls index
+            ConcurrentHashMap<String, Integer> itemIdToToolCallIndex = new ConcurrentHashMap<>();
+            ConcurrentHashMap<String, StringBuilder> pendingArgumentDeltas = new ConcurrentHashMap<>();
+            ConcurrentHashMap<String, StringBuilder> emittedArgumentDeltas = new ConcurrentHashMap<>();
+            AtomicInteger toolCallCounter = new AtomicInteger(0);
 
-        return upstream.flatMapIterable(event -> {
+            return upstream.flatMapIterable(event -> {
             String data = event.data();
             if (data == null || data.isBlank()) return Collections.<ServerSentEvent<String>>emptyList();
 
@@ -288,6 +292,14 @@ public class OpenAiChatToResponsesConverter implements ProtocolConverter {
                                 // 发送 tool_call start
                                 ObjectNode chunk = buildToolCallStartChunk(chatId, tcIdx, callId, name);
                                 events.add(ServerSentEvent.<String>builder().data(chunk.toString()).build());
+                                StringBuilder pending = pendingArgumentDeltas.remove(itemId);
+                                if (pending != null && pending.length() > 0) {
+                                    ObjectNode deltaChunk = buildToolCallDeltaChunk(chatId, tcIdx, pending.toString());
+                                    events.add(ServerSentEvent.<String>builder().data(deltaChunk.toString()).build());
+                                    emittedArgumentDeltas
+                                            .computeIfAbsent(itemId, ignored -> new StringBuilder())
+                                            .append(pending);
+                                }
                                 yield events;
                             }
                         }
@@ -296,17 +308,77 @@ public class OpenAiChatToResponsesConverter implements ProtocolConverter {
                     case "response.function_call_arguments.delta" -> {
                         String itemId = node.has("item_id") ? node.get("item_id").asText() : "";
                         String argDelta = node.has("delta") ? node.get("delta").asText() : "";
-                        int tcIdx = itemIdToToolCallIndex.getOrDefault(itemId, 0);
+                        Integer tcIdx = itemIdToToolCallIndex.get(itemId);
+                        if (tcIdx == null) {
+                            if (!argDelta.isEmpty()) {
+                                pendingArgumentDeltas
+                                        .computeIfAbsent(itemId, ignored -> new StringBuilder())
+                                        .append(argDelta);
+                            }
+                            yield Collections.<ServerSentEvent<String>>emptyList();
+                        }
 
                         ObjectNode chunk = buildToolCallDeltaChunk(chatId, tcIdx, argDelta);
+                        emittedArgumentDeltas
+                                .computeIfAbsent(itemId, ignored -> new StringBuilder())
+                                .append(argDelta);
                         yield List.of(ServerSentEvent.<String>builder().data(chunk.toString()).build());
                     }
+                    case "response.output_item.done" -> {
+                        if (!node.has("item") || !"function_call".equals(node.get("item").path("type").asText())) {
+                            yield Collections.<ServerSentEvent<String>>emptyList();
+                        }
+                        JsonNode item = node.get("item");
+                        String itemId = item.path("id").asText("");
+                        String callId = item.path("call_id").asText(itemId);
+                        String name = item.path("name").asText("");
+                        String arguments = item.path("arguments").asText("");
+                        List<ServerSentEvent<String>> events = new ArrayList<>();
+
+                        Integer existingIndex = itemIdToToolCallIndex.get(itemId);
+                        int tcIdx;
+                        if (existingIndex == null) {
+                            tcIdx = toolCallCounter.getAndIncrement();
+                            itemIdToToolCallIndex.put(itemId, tcIdx);
+                            if (!sentRole.getAndSet(true)) {
+                                ObjectNode roleChunk = buildChatStreamChunk(chatId, null, "assistant", null, null, null);
+                                events.add(ServerSentEvent.<String>builder().data(roleChunk.toString()).build());
+                            }
+                            events.add(ServerSentEvent.<String>builder().data(buildToolCallStartChunk(chatId, tcIdx, callId, name).toString()).build());
+                        } else {
+                            tcIdx = existingIndex;
+                        }
+
+                        String remainingArguments = remainingArgumentsDelta(
+                                emittedArgumentDeltas.get(itemId),
+                                arguments
+                        );
+                        if (!remainingArguments.isEmpty()) {
+                            events.add(ServerSentEvent.<String>builder().data(buildToolCallDeltaChunk(chatId, tcIdx, remainingArguments).toString()).build());
+                            emittedArgumentDeltas
+                                    .computeIfAbsent(itemId, ignored -> new StringBuilder())
+                                    .append(remainingArguments);
+                        }
+                        yield events;
+                    }
                     case "response.completed", "response.done" -> {
+                        if (!completed.compareAndSet(false, true)) {
+                            yield Collections.<ServerSentEvent<String>>emptyList();
+                        }
                         // 发送 finish_reason + [DONE]
                         List<ServerSentEvent<String>> events = new ArrayList<>();
                         String finishReason = toolCallCounter.get() > 0 ? "tool_calls" : "stop";
                         ObjectNode finishChunk = buildChatStreamChunk(chatId, null, null, null, finishReason, null);
                         events.add(ServerSentEvent.<String>builder().data(finishChunk.toString()).build());
+                        JsonNode usage = null;
+                        if (node.has("response") && node.get("response").has("usage")) {
+                            usage = node.get("response").get("usage");
+                        } else if (node.has("usage")) {
+                            usage = node.get("usage");
+                        }
+                        if (usage != null && !usage.isNull()) {
+                            events.add(ServerSentEvent.<String>builder().data(buildUsageChunk(chatId, usage).toString()).build());
+                        }
                         events.add(ServerSentEvent.<String>builder().data("[DONE]").build());
                         yield events;
                     }
@@ -316,6 +388,7 @@ public class OpenAiChatToResponsesConverter implements ProtocolConverter {
                 log.debug("Failed to parse Responses stream event: {}", data);
                 return Collections.<ServerSentEvent<String>>emptyList();
             }
+            });
         });
     }
 
@@ -401,6 +474,35 @@ public class OpenAiChatToResponsesConverter implements ProtocolConverter {
         choices.add(choice);
         chunk.set("choices", choices);
         return chunk;
+    }
+
+    private ObjectNode buildUsageChunk(String chatId, JsonNode usage) {
+        ObjectNode chunk = mapper.createObjectNode();
+        chunk.put("id", chatId);
+        chunk.put("object", "chat.completion.chunk");
+        chunk.put("created", System.currentTimeMillis() / 1000);
+        chunk.set("choices", mapper.createArrayNode());
+
+        int promptTokens = usage.path("input_tokens").asInt(0);
+        int completionTokens = usage.path("output_tokens").asInt(0);
+        int totalTokens = usage.has("total_tokens") ? usage.get("total_tokens").asInt() : promptTokens + completionTokens;
+
+        ObjectNode openAiUsage = mapper.createObjectNode();
+        openAiUsage.put("prompt_tokens", promptTokens);
+        openAiUsage.put("completion_tokens", completionTokens);
+        openAiUsage.put("total_tokens", totalTokens);
+        chunk.set("usage", openAiUsage);
+        return chunk;
+    }
+
+    private String remainingArgumentsDelta(StringBuilder emitted, String fullArguments) {
+        if (fullArguments == null || fullArguments.isEmpty()) return "";
+        if (emitted == null || emitted.length() == 0) return fullArguments;
+        String emittedText = emitted.toString();
+        if (fullArguments.startsWith(emittedText)) {
+            return fullArguments.substring(emittedText.length());
+        }
+        return "";
     }
 
     /**

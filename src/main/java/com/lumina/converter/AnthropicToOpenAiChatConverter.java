@@ -10,9 +10,6 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Anthropic Messages → OpenAI Chat Completions 协议转换器
@@ -354,201 +351,391 @@ public class AnthropicToOpenAiChatConverter implements ProtocolConverter {
     // ==================== 流式转换: OpenAI Chat Stream → Anthropic Stream ====================
 
     private Flux<ServerSentEvent<String>> convertOpenAiChatStreamToAnthropic(Flux<ServerSentEvent<String>> upstream) {
-        AtomicBoolean started = new AtomicBoolean(false);
-        AtomicInteger blockIndex = new AtomicInteger(0);
-        AtomicBoolean textBlockStarted = new AtomicBoolean(false);
-        String msgId = "msg_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
-        // 跟踪 tool_call 状态: tcIndex → anthropic block index
-        ConcurrentHashMap<Integer, Integer> toolCallBlockIndex = new ConcurrentHashMap<>();
+        return Flux.defer(() -> {
+            OpenAiChatToAnthropicStreamState state = new OpenAiChatToAnthropicStreamState();
+            return upstream
+                    .flatMapIterable(state::handle)
+                    .concatWith(Flux.defer(() -> Flux.fromIterable(state.finish())));
+        });
+    }
 
-        return upstream.flatMapIterable(event -> {
+    private static final class OpenAiChatToAnthropicStreamState {
+        private final String fallbackMessageId = "msg_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+        private final Map<Integer, ToolCallState> tools = new TreeMap<>();
+        private boolean messageStarted;
+        private boolean finished;
+        private boolean seenUpstreamData;
+        private int nextBlockIndex;
+        private Integer openTextBlockIndex;
+        private Integer openThinkingBlockIndex;
+        private String messageId;
+        private String model;
+        private String stopReason;
+        private ObjectNode latestUsage;
+
+        List<ServerSentEvent<String>> handle(ServerSentEvent<String> event) {
+            if (finished) {
+                return Collections.emptyList();
+            }
             String data = event.data();
-            if (data == null || data.isBlank()) return Collections.<ServerSentEvent<String>>emptyList();
+            if (data == null || data.isBlank()) {
+                return Collections.emptyList();
+            }
+            seenUpstreamData = true;
             if ("[DONE]".equals(data)) {
-                return buildAnthropicStopEvents(msgId, blockIndex.get(), textBlockStarted.get(), toolCallBlockIndex);
+                return finish();
             }
 
             try {
                 JsonNode node = mapper.readTree(data);
                 List<ServerSentEvent<String>> events = new ArrayList<>();
+                captureEnvelope(node);
+                events.addAll(ensureMessageStart());
+                captureUsage(node);
 
-                if (!started.getAndSet(true)) {
-                    events.addAll(buildAnthropicStartEvents(msgId, node));
-                }
-
-                if (node.has("choices") && node.get("choices").isArray()) {
-                    for (JsonNode choice : node.get("choices")) {
-                        if (!choice.has("delta")) continue;
+                JsonNode choices = node.get("choices");
+                if (choices != null && choices.isArray()) {
+                    for (JsonNode choice : choices) {
                         JsonNode delta = choice.get("delta");
-
-                        // 文本内容
-                        if (delta.has("content") && !delta.get("content").isNull()) {
-                            String textDelta = delta.get("content").asText();
-                            if (textDelta.isEmpty()) {
-                                continue;
-                            }
-
-                            if (!textBlockStarted.getAndSet(true)) {
-                                // 发送 content_block_start (text)
-                                ObjectNode blockStart = mapper.createObjectNode();
-                                blockStart.put("type", "content_block_start");
-                                blockStart.put("index", blockIndex.get());
-                                ObjectNode contentBlock = mapper.createObjectNode();
-                                contentBlock.put("type", "text");
-                                contentBlock.put("text", "");
-                                blockStart.set("content_block", contentBlock);
-                                events.add(sse("content_block_start", blockStart.toString()));
-                            }
-
-                            ObjectNode deltaEvent = mapper.createObjectNode();
-                            deltaEvent.put("type", "content_block_delta");
-                            deltaEvent.put("index", blockIndex.get());
-                            ObjectNode deltaObj = mapper.createObjectNode();
-                            deltaObj.put("type", "text_delta");
-                            deltaObj.put("text", textDelta);
-                            deltaEvent.set("delta", deltaObj);
-                            events.add(sse("content_block_delta", deltaEvent.toString()));
+                        if (delta != null && delta.isObject()) {
+                            appendReasoningDelta(events, delta);
+                            appendTextDelta(events, delta);
+                            appendToolCallDeltas(events, delta);
                         }
-
-                        // tool_calls
-                        if (delta.has("tool_calls") && delta.get("tool_calls").isArray()) {
-                            for (JsonNode tc : delta.get("tool_calls")) {
-                                int tcIndex = tc.has("index") ? tc.get("index").asInt() : 0;
-
-                                if (!toolCallBlockIndex.containsKey(tcIndex)) {
-                                    // 关闭之前的 text block (如果有)
-                                    if (textBlockStarted.get() && blockIndex.get() == 0 && toolCallBlockIndex.isEmpty()) {
-                                        ObjectNode blockStop = mapper.createObjectNode();
-                                        blockStop.put("type", "content_block_stop");
-                                        blockStop.put("index", blockIndex.get());
-                                        events.add(sse("content_block_stop", blockStop.toString()));
-                                        blockIndex.incrementAndGet();
-                                    }
-
-                                    int currentBlockIdx = blockIndex.getAndIncrement();
-                                    toolCallBlockIndex.put(tcIndex, currentBlockIdx);
-
-                                    // content_block_start (tool_use)
-                                    String tcId = tc.has("id") ? tc.get("id").asText() : "toolu_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-                                    String tcName = "";
-                                    if (tc.has("function") && tc.get("function").has("name")) {
-                                        tcName = tc.get("function").get("name").asText();
-                                    }
-
-                                    ObjectNode blockStart = mapper.createObjectNode();
-                                    blockStart.put("type", "content_block_start");
-                                    blockStart.put("index", currentBlockIdx);
-                                    ObjectNode contentBlock = mapper.createObjectNode();
-                                    contentBlock.put("type", "tool_use");
-                                    contentBlock.put("id", tcId);
-                                    contentBlock.put("name", tcName);
-                                    contentBlock.set("input", mapper.createObjectNode());
-                                    blockStart.set("content_block", contentBlock);
-                                    events.add(sse("content_block_start", blockStart.toString()));
-                                }
-
-                                // arguments delta → input_json_delta
-                                if (tc.has("function") && tc.get("function").has("arguments")) {
-                                    String argDelta = tc.get("function").get("arguments").asText();
-                                    if (argDelta != null && !argDelta.isEmpty()) {
-                                        int currentBlockIdx = toolCallBlockIndex.get(tcIndex);
-                                        ObjectNode deltaEvent = mapper.createObjectNode();
-                                        deltaEvent.put("type", "content_block_delta");
-                                        deltaEvent.put("index", currentBlockIdx);
-                                        ObjectNode deltaObj = mapper.createObjectNode();
-                                        deltaObj.put("type", "input_json_delta");
-                                        deltaObj.put("partial_json", argDelta);
-                                        deltaEvent.set("delta", deltaObj);
-                                        events.add(sse("content_block_delta", deltaEvent.toString()));
-                                    }
-                                }
-                            }
-                        }
-
-                        // finish_reason 在 message_delta 中处理
-                        if (choice.has("finish_reason") && !choice.get("finish_reason").isNull()) {
-                            // 不在这里处理，等 [DONE] 时统一发送
+                        if (captureFinishReason(choice)) {
+                            closeNonToolBlocks(events);
+                            startDanglingTools(events);
+                            closeOpenTools(events);
                         }
                     }
                 }
                 return events;
             } catch (Exception e) {
                 log.debug("Failed to parse OpenAI stream event: {}", data);
-                return Collections.<ServerSentEvent<String>>emptyList();
+                return Collections.emptyList();
             }
-        });
-    }
+        }
 
-    private List<ServerSentEvent<String>> buildAnthropicStartEvents(String msgId, JsonNode firstChunk) {
-        List<ServerSentEvent<String>> events = new ArrayList<>();
-
-        ObjectNode messageStart = mapper.createObjectNode();
-        messageStart.put("type", "message_start");
-        ObjectNode message = mapper.createObjectNode();
-        message.put("id", msgId);
-        message.put("type", "message");
-        message.put("role", "assistant");
-        if (firstChunk.has("model")) message.put("model", firstChunk.get("model").asText());
-        message.set("content", mapper.createArrayNode());
-        message.putNull("stop_reason");
-        ObjectNode usage = mapper.createObjectNode();
-        usage.put("input_tokens", 0);
-        usage.put("output_tokens", 0);
-        message.set("usage", usage);
-        messageStart.set("message", message);
-        events.add(sse("message_start", messageStart.toString()));
-
-        return events;
-    }
-
-    private List<ServerSentEvent<String>> buildAnthropicStopEvents(
-            String msgId, int blockIndex, boolean hasTextBlock,
-            ConcurrentHashMap<Integer, Integer> toolCallBlockIndex) {
-        List<ServerSentEvent<String>> events = new ArrayList<>();
-
-        // 关闭最后一个 content_block
-        if (hasTextBlock || !toolCallBlockIndex.isEmpty()) {
-            // 如果有 text block 且没有 tool_calls，关闭 text block
-            if (hasTextBlock && toolCallBlockIndex.isEmpty()) {
-                ObjectNode blockStop = mapper.createObjectNode();
-                blockStop.put("type", "content_block_stop");
-                blockStop.put("index", 0);
-                events.add(sse("content_block_stop", blockStop.toString()));
+        List<ServerSentEvent<String>> finish() {
+            if (finished) {
+                return Collections.emptyList();
             }
-            // 关闭所有 tool_call blocks
-            if (!toolCallBlockIndex.isEmpty()) {
-                List<Integer> anthropicIndexes = new ArrayList<>(toolCallBlockIndex.values());
-                Collections.sort(anthropicIndexes);
-                for (int anthropicIdx : anthropicIndexes) {
-                    ObjectNode blockStop = mapper.createObjectNode();
-                    blockStop.put("type", "content_block_stop");
-                    blockStop.put("index", anthropicIdx);
-                    events.add(sse("content_block_stop", blockStop.toString()));
+            if (!seenUpstreamData && !messageStarted) {
+                finished = true;
+                return Collections.emptyList();
+            }
+            finished = true;
+
+            List<ServerSentEvent<String>> events = new ArrayList<>();
+            events.addAll(ensureMessageStart());
+            closeNonToolBlocks(events);
+            startDanglingTools(events);
+            closeOpenTools(events);
+
+            ObjectNode messageDelta = mapper.createObjectNode();
+            messageDelta.put("type", "message_delta");
+            ObjectNode delta = mapper.createObjectNode();
+            delta.put("stop_reason", stopReason != null ? stopReason : (hasStartedTool() ? "tool_use" : "end_turn"));
+            delta.putNull("stop_sequence");
+            messageDelta.set("delta", delta);
+            messageDelta.set("usage", latestUsage != null ? latestUsage : emptyAnthropicUsage());
+            events.add(sse("message_delta", messageDelta.toString()));
+
+            ObjectNode messageStop = mapper.createObjectNode();
+            messageStop.put("type", "message_stop");
+            events.add(sse("message_stop", messageStop.toString()));
+            return events;
+        }
+
+        private void captureEnvelope(JsonNode node) {
+            if (messageId == null && node.hasNonNull("id")) {
+                messageId = node.get("id").asText();
+            }
+            if (model == null && node.hasNonNull("model")) {
+                model = node.get("model").asText();
+            }
+        }
+
+        private List<ServerSentEvent<String>> ensureMessageStart() {
+            if (messageStarted) {
+                return Collections.emptyList();
+            }
+            messageStarted = true;
+
+            ObjectNode messageStart = mapper.createObjectNode();
+            messageStart.put("type", "message_start");
+            ObjectNode message = mapper.createObjectNode();
+            message.put("id", messageId != null && !messageId.isBlank() ? messageId : fallbackMessageId);
+            message.put("type", "message");
+            message.put("role", "assistant");
+            message.put("model", model != null ? model : "");
+            message.set("content", mapper.createArrayNode());
+            message.putNull("stop_reason");
+            message.set("usage", emptyAnthropicUsage());
+            messageStart.set("message", message);
+            return List.of(sse("message_start", messageStart.toString()));
+        }
+
+        private void captureUsage(JsonNode node) {
+            JsonNode usage = node.get("usage");
+            if (usage == null || usage.isNull() || !usage.isObject()) {
+                return;
+            }
+            ObjectNode anthropicUsage = emptyAnthropicUsage();
+            int cacheRead = usage.path("cache_read_input_tokens").asInt(0);
+            int cacheCreation = usage.path("cache_creation_input_tokens").asInt(0);
+            JsonNode promptDetails = usage.get("prompt_tokens_details");
+            if (cacheRead == 0 && promptDetails != null && promptDetails.has("cached_tokens")) {
+                cacheRead = promptDetails.path("cached_tokens").asInt(0);
+            }
+            int inputTokens = usage.path("input_tokens").asInt(
+                    Math.max(0, usage.path("prompt_tokens").asInt(0) - cacheRead - cacheCreation));
+            int outputTokens = usage.path("output_tokens").asInt(usage.path("completion_tokens").asInt(0));
+            anthropicUsage.put("input_tokens", inputTokens);
+            anthropicUsage.put("output_tokens", outputTokens);
+            if (cacheRead > 0) {
+                anthropicUsage.put("cache_read_input_tokens", cacheRead);
+            }
+            if (cacheCreation > 0) {
+                anthropicUsage.put("cache_creation_input_tokens", cacheCreation);
+            }
+            latestUsage = anthropicUsage;
+        }
+
+        private boolean captureFinishReason(JsonNode choice) {
+            JsonNode finishReason = choice.get("finish_reason");
+            if (finishReason == null || finishReason.isNull()) {
+                return false;
+            }
+            stopReason = mapFinishReasonValue(finishReason.asText());
+            return true;
+        }
+
+        private void appendReasoningDelta(List<ServerSentEvent<String>> events, JsonNode delta) {
+            String reasoning = textFromFirst(delta, "reasoning_content", "reasoning");
+            if (reasoning == null || reasoning.isEmpty()) {
+                return;
+            }
+            closeTextBlock(events);
+            if (openThinkingBlockIndex == null) {
+                int index = nextBlockIndex++;
+                openThinkingBlockIndex = index;
+                ObjectNode blockStart = mapper.createObjectNode();
+                blockStart.put("type", "content_block_start");
+                blockStart.put("index", index);
+                ObjectNode contentBlock = mapper.createObjectNode();
+                contentBlock.put("type", "thinking");
+                contentBlock.put("thinking", "");
+                blockStart.set("content_block", contentBlock);
+                events.add(sse("content_block_start", blockStart.toString()));
+            }
+
+            ObjectNode deltaEvent = mapper.createObjectNode();
+            deltaEvent.put("type", "content_block_delta");
+            deltaEvent.put("index", openThinkingBlockIndex);
+            ObjectNode deltaObj = mapper.createObjectNode();
+            deltaObj.put("type", "thinking_delta");
+            deltaObj.put("thinking", reasoning);
+            deltaEvent.set("delta", deltaObj);
+            events.add(sse("content_block_delta", deltaEvent.toString()));
+        }
+
+        private void appendTextDelta(List<ServerSentEvent<String>> events, JsonNode delta) {
+            JsonNode content = delta.get("content");
+            if (content == null || content.isNull()) {
+                return;
+            }
+            String text = content.asText();
+            if (text.isEmpty()) {
+                return;
+            }
+            closeThinkingBlock(events);
+            if (openTextBlockIndex == null) {
+                int index = nextBlockIndex++;
+                openTextBlockIndex = index;
+                ObjectNode blockStart = mapper.createObjectNode();
+                blockStart.put("type", "content_block_start");
+                blockStart.put("index", index);
+                ObjectNode contentBlock = mapper.createObjectNode();
+                contentBlock.put("type", "text");
+                contentBlock.put("text", "");
+                blockStart.set("content_block", contentBlock);
+                events.add(sse("content_block_start", blockStart.toString()));
+            }
+
+            ObjectNode deltaEvent = mapper.createObjectNode();
+            deltaEvent.put("type", "content_block_delta");
+            deltaEvent.put("index", openTextBlockIndex);
+            ObjectNode deltaObj = mapper.createObjectNode();
+            deltaObj.put("type", "text_delta");
+            deltaObj.put("text", text);
+            deltaEvent.set("delta", deltaObj);
+            events.add(sse("content_block_delta", deltaEvent.toString()));
+        }
+
+        private void appendToolCallDeltas(List<ServerSentEvent<String>> events, JsonNode delta) {
+            JsonNode toolCalls = delta.get("tool_calls");
+            if (toolCalls == null || !toolCalls.isArray() || toolCalls.isEmpty()) {
+                return;
+            }
+            closeNonToolBlocks(events);
+
+            for (JsonNode toolCall : toolCalls) {
+                int toolIndex = toolCall.path("index").asInt(0);
+                ToolCallState tool = tools.computeIfAbsent(toolIndex, ignored -> new ToolCallState(nextBlockIndex++));
+                if (toolCall.hasNonNull("id")) {
+                    tool.id = toolCall.get("id").asText();
+                }
+                JsonNode function = toolCall.get("function");
+                String argumentsDelta = null;
+                if (function != null && function.isObject()) {
+                    if (function.hasNonNull("name")) {
+                        tool.name = function.get("name").asText();
+                    }
+                    if (function.has("arguments") && !function.get("arguments").isNull()) {
+                        argumentsDelta = function.get("arguments").asText();
+                    }
+                }
+
+                if (!tool.started && tool.canStart()) {
+                    startTool(events, tool);
+                }
+                if (argumentsDelta != null && !argumentsDelta.isEmpty()) {
+                    if (tool.started) {
+                        emitToolArgumentsDelta(events, tool.blockIndex, argumentsDelta);
+                    } else {
+                        tool.pendingArguments.append(argumentsDelta);
+                    }
                 }
             }
         }
 
-        // message_delta
-        ObjectNode messageDelta = mapper.createObjectNode();
-        messageDelta.put("type", "message_delta");
-        ObjectNode delta = mapper.createObjectNode();
-        delta.put("stop_reason", toolCallBlockIndex.isEmpty() ? "end_turn" : "tool_use");
-        delta.putNull("stop_sequence");
-        messageDelta.set("delta", delta);
-        ObjectNode usage = mapper.createObjectNode();
-        usage.put("output_tokens", 0);
-        messageDelta.set("usage", usage);
-        events.add(sse("message_delta", messageDelta.toString()));
+        private void startDanglingTools(List<ServerSentEvent<String>> events) {
+            tools.forEach((toolIndex, tool) -> {
+                if (tool.started || !tool.hasPayload()) {
+                    return;
+                }
+                if (tool.id == null || tool.id.isBlank()) {
+                    tool.id = "tool_call_" + toolIndex;
+                }
+                if (tool.name == null || tool.name.isBlank()) {
+                    tool.name = "unknown_tool";
+                }
+                startTool(events, tool);
+            });
+        }
 
-        // message_stop
-        ObjectNode messageStop = mapper.createObjectNode();
-        messageStop.put("type", "message_stop");
-        events.add(sse("message_stop", messageStop.toString()));
+        private void startTool(List<ServerSentEvent<String>> events, ToolCallState tool) {
+            tool.started = true;
+            ObjectNode blockStart = mapper.createObjectNode();
+            blockStart.put("type", "content_block_start");
+            blockStart.put("index", tool.blockIndex);
+            ObjectNode contentBlock = mapper.createObjectNode();
+            contentBlock.put("type", "tool_use");
+            contentBlock.put("id", tool.id);
+            contentBlock.put("name", tool.name);
+            contentBlock.set("input", mapper.createObjectNode());
+            blockStart.set("content_block", contentBlock);
+            events.add(sse("content_block_start", blockStart.toString()));
+            if (!tool.pendingArguments.isEmpty()) {
+                emitToolArgumentsDelta(events, tool.blockIndex, tool.pendingArguments.toString());
+                tool.pendingArguments.setLength(0);
+            }
+        }
 
-        return events;
+        private void emitToolArgumentsDelta(List<ServerSentEvent<String>> events, int blockIndex, String argumentsDelta) {
+            ObjectNode deltaEvent = mapper.createObjectNode();
+            deltaEvent.put("type", "content_block_delta");
+            deltaEvent.put("index", blockIndex);
+            ObjectNode deltaObj = mapper.createObjectNode();
+            deltaObj.put("type", "input_json_delta");
+            deltaObj.put("partial_json", argumentsDelta);
+            deltaEvent.set("delta", deltaObj);
+            events.add(sse("content_block_delta", deltaEvent.toString()));
+        }
+
+        private void closeNonToolBlocks(List<ServerSentEvent<String>> events) {
+            closeThinkingBlock(events);
+            closeTextBlock(events);
+        }
+
+        private void closeTextBlock(List<ServerSentEvent<String>> events) {
+            if (openTextBlockIndex == null) {
+                return;
+            }
+            events.add(contentBlockStop(openTextBlockIndex));
+            openTextBlockIndex = null;
+        }
+
+        private void closeThinkingBlock(List<ServerSentEvent<String>> events) {
+            if (openThinkingBlockIndex == null) {
+                return;
+            }
+            events.add(contentBlockStop(openThinkingBlockIndex));
+            openThinkingBlockIndex = null;
+        }
+
+        private void closeOpenTools(List<ServerSentEvent<String>> events) {
+            tools.values().stream()
+                    .filter(tool -> tool.started && !tool.closed)
+                    .sorted(Comparator.comparingInt(tool -> tool.blockIndex))
+                    .forEach(tool -> {
+                        events.add(contentBlockStop(tool.blockIndex));
+                        tool.closed = true;
+                    });
+        }
+
+        private boolean hasStartedTool() {
+            return tools.values().stream().anyMatch(tool -> tool.started);
+        }
+
+        private static String textFromFirst(JsonNode node, String... fields) {
+            for (String field : fields) {
+                JsonNode value = node.get(field);
+                if (value != null && !value.isNull()) {
+                    return value.asText();
+                }
+            }
+            return null;
+        }
+
+        private static ServerSentEvent<String> contentBlockStop(int index) {
+            ObjectNode blockStop = mapper.createObjectNode();
+            blockStop.put("type", "content_block_stop");
+            blockStop.put("index", index);
+            return sse("content_block_stop", blockStop.toString());
+        }
+
+        private static ObjectNode emptyAnthropicUsage() {
+            ObjectNode usage = mapper.createObjectNode();
+            usage.put("input_tokens", 0);
+            usage.put("output_tokens", 0);
+            return usage;
+        }
     }
 
-    private ServerSentEvent<String> sse(String eventType, String data) {
+    private static final class ToolCallState {
+        private final int blockIndex;
+        private final StringBuilder pendingArguments = new StringBuilder();
+        private String id;
+        private String name;
+        private boolean started;
+        private boolean closed;
+
+        private ToolCallState(int blockIndex) {
+            this.blockIndex = blockIndex;
+        }
+
+        private boolean canStart() {
+            return id != null && !id.isBlank() && name != null && !name.isBlank();
+        }
+
+        private boolean hasPayload() {
+            return canStart() || !pendingArguments.isEmpty();
+        }
+    }
+
+    private static ServerSentEvent<String> sse(String eventType, String data) {
         return ServerSentEvent.<String>builder().event(eventType).data(data).build();
     }
 
@@ -617,6 +804,10 @@ public class AnthropicToOpenAiChatConverter implements ProtocolConverter {
     }
 
     private String mapFinishReason(String openAiReason) {
+        return mapFinishReasonValue(openAiReason);
+    }
+
+    private static String mapFinishReasonValue(String openAiReason) {
         if (openAiReason == null) return "end_turn";
         return switch (openAiReason) {
             case "stop" -> "end_turn";

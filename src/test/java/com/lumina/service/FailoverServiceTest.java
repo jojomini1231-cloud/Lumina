@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -256,6 +257,14 @@ class FailoverServiceTest {
     }
 
     @Test
+    void prematureCloseIsClassifiedAsConnectionFailure() {
+        FailureType failureType = failoverService.classifyError(
+                new RuntimeException("200 OK, but response failed with cause: Connection prematurely closed DURING response"));
+
+        assertEquals(FailureType.CONNECT, failureType);
+    }
+
+    @Test
     void streamErrorBeforeFirstChunkFailsOverToNextProvider() {
         AtomicInteger calls = new AtomicInteger();
         List<String> providerNames = new ArrayList<>();
@@ -280,7 +289,7 @@ class FailoverServiceTest {
     }
 
     @Test
-    void streamErrorAfterFirstChunkDoesNotFailOver() {
+    void streamErrorAfterFirstChunkCompletesAfterErrorEvent() {
         List<String> providerNames = new ArrayList<>();
 
         Flux<ServerSentEvent<String>> result = failoverService.executeWithFailoverFlux(
@@ -304,12 +313,12 @@ class FailoverServiceTest {
                 .block(Duration.ofSeconds(1));
 
         assertEquals(List.of("provider-a"), providerNames);
-        assertEquals(2, events.size());
+        assertEquals(3, events.size());
         assertEquals("{\"content\":\"partial\"}", events.get(0).data());
-        org.junit.jupiter.api.Assertions.assertNotNull(errorRef.get());
-        assertEquals("midstream failed", errorRef.get().getMessage());
+        assertNull(errorRef.get());
         org.junit.jupiter.api.Assertions.assertTrue(events.get(1).data() != null
                 && events.get(1).data().contains("网关传输中途发生网络异常中断"));
+        assertEquals("[DONE]", events.get(2).data());
     }
 
     private ModelGroupConfig roundRobinGroup(String id) {

@@ -11,6 +11,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AnthropicToOpenAiChatConverterTest {
 
@@ -101,7 +102,106 @@ class AnthropicToOpenAiChatConverterTest {
         assertFalse(events.stream().anyMatch(event -> event.data() != null && event.data().contains("text_delta")));
     }
 
+    @Test
+    void streamResponseCompletesGlmToolCallWithUsageAndToolStop() throws Exception {
+        List<ServerSentEvent<String>> events = converter.convertStreamResponse(Flux.just(
+                sse("{\"id\":\"chatcmpl_glm\",\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}"),
+                sse("{\"id\":\"chatcmpl_glm\",\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"Bash\",\"arguments\":\"{\\\"command\\\":\"}}]},\"finish_reason\":null}]}"),
+                sse("{\"id\":\"chatcmpl_glm\",\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"pwd\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":4,\"prompt_tokens_details\":{\"cached_tokens\":3}}}"),
+                sse("[DONE]")
+        )).collectList().block();
+
+        assertEquals(1, countEvents(events, "content_block_start"));
+        assertEquals(1, countEvents(events, "content_block_stop"));
+        JsonNode toolStart = firstEventData(events, "content_block_start");
+        assertEquals("tool_use", toolStart.get("content_block").get("type").asText());
+        assertEquals("call_1", toolStart.get("content_block").get("id").asText());
+        assertEquals("Bash", toolStart.get("content_block").get("name").asText());
+
+        String joined = events.stream().map(ServerSentEvent::data).filter(data -> data != null).reduce("", String::concat);
+        assertTrue(joined.contains("\"partial_json\":\"{\\\"command\\\":\""));
+        assertTrue(joined.contains("\"partial_json\":\"\\\"pwd\\\"}\""));
+
+        JsonNode messageDelta = firstEventData(events, "message_delta");
+        assertEquals("tool_use", messageDelta.get("delta").get("stop_reason").asText());
+        assertEquals(9, messageDelta.get("usage").get("input_tokens").asInt());
+        assertEquals(3, messageDelta.get("usage").get("cache_read_input_tokens").asInt());
+        assertEquals(4, messageDelta.get("usage").get("output_tokens").asInt());
+        assertEquals("message_stop", events.get(events.size() - 1).event());
+    }
+
+    @Test
+    void streamResponseBuffersToolArgumentsUntilIdAndNameArrive() throws Exception {
+        List<ServerSentEvent<String>> events = converter.convertStreamResponse(Flux.just(
+                sse("{\"id\":\"chatcmpl_late\",\"model\":\"glm-5.2\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"path\\\":\"}}]}}]}"),
+                sse("{\"id\":\"chatcmpl_late\",\"model\":\"glm-5.2\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_late\",\"type\":\"function\",\"function\":{\"name\":\"Read\",\"arguments\":\"\\\"README.md\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}"),
+                sse("[DONE]")
+        )).collectList().block();
+
+        JsonNode toolStart = firstEventData(events, "content_block_start");
+        assertEquals("call_late", toolStart.get("content_block").get("id").asText());
+        assertEquals("Read", toolStart.get("content_block").get("name").asText());
+        String joined = events.stream().map(ServerSentEvent::data).filter(data -> data != null).reduce("", String::concat);
+        assertTrue(joined.contains("\"partial_json\":\"{\\\"path\\\":\""));
+        assertTrue(joined.contains("\"partial_json\":\"\\\"README.md\\\"}\""));
+    }
+
+    @Test
+    void streamResponseFinalizesWhenUpstreamCompletesWithoutDone() throws Exception {
+        List<ServerSentEvent<String>> events = converter.convertStreamResponse(Flux.just(
+                sse("{\"id\":\"chatcmpl_no_done\",\"model\":\"glm-5.2\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"Bash\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}")
+        )).collectList().block();
+
+        assertEquals(1, countEvents(events, "message_delta"));
+        assertEquals(1, countEvents(events, "message_stop"));
+        assertEquals("message_stop", events.get(events.size() - 1).event());
+    }
+
+    @Test
+    void streamResponseStopsToolBlockOnFinishReasonBeforeDone() {
+        List<ServerSentEvent<String>> events = converter.convertStreamResponse(Flux.just(
+                sse("{\"id\":\"chatcmpl_finish\",\"model\":\"glm-5.2\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"Bash\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}"),
+                sse("{\"id\":\"chatcmpl_finish\",\"model\":\"glm-5.2\",\"choices\":[],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2}}"),
+                sse("[DONE]")
+        )).collectList().block();
+
+        int blockStopIndex = eventIndex(events, "content_block_stop");
+        int messageDeltaIndex = eventIndex(events, "message_delta");
+        assertTrue(blockStopIndex > -1);
+        assertTrue(messageDeltaIndex > blockStopIndex);
+        JsonNode messageDelta = firstEventData(events, "message_delta");
+        assertEquals(7, messageDelta.get("usage").get("input_tokens").asInt());
+        assertEquals(2, messageDelta.get("usage").get("output_tokens").asInt());
+    }
+
     private ServerSentEvent<String> sse(String data) {
         return ServerSentEvent.<String>builder().data(data).build();
+    }
+
+    private long countEvents(List<ServerSentEvent<String>> events, String eventType) {
+        return events.stream().filter(event -> eventType.equals(event.event())).count();
+    }
+
+    private JsonNode firstEventData(List<ServerSentEvent<String>> events, String eventType) {
+        return events.stream()
+                .filter(event -> eventType.equals(event.event()))
+                .findFirst()
+                .map(event -> {
+                    try {
+                        return mapper.readTree(event.data());
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .orElseThrow();
+    }
+
+    private int eventIndex(List<ServerSentEvent<String>> events, String eventType) {
+        for (int i = 0; i < events.size(); i++) {
+            if (eventType.equals(events.get(i).event())) {
+                return i;
+            }
+        }
+        return -1;
     }
 }

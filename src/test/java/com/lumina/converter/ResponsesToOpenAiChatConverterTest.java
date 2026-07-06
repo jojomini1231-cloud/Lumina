@@ -250,6 +250,42 @@ class ResponsesToOpenAiChatConverterTest {
         assertEquals("Done.", assistant.get("content").asText());
     }
 
+    @Test
+    void streamResponseBuffersToolArgumentsUntilToolMetadataArrives() throws Exception {
+        List<ServerSentEvent<String>> events = converter.convertStreamResponse(Flux.just(
+                sse("{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"cmd\"}}]}}]}"),
+                sse("{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"exec_command\",\"arguments\":\"\\\":\\\"pwd\\\"}\"}}]}}]}"),
+                sse("[DONE]")
+        )).collectList().block();
+
+        assertNotNull(events);
+        int itemAddedIndex = indexOfEvent(events, "response.output_item.added", "function_call");
+        int firstArgsDeltaIndex = indexOfEvent(events, "response.function_call_arguments.delta", null);
+        ObjectNode functionCall = findDoneItem(events, "function_call");
+
+        assertTrue(itemAddedIndex >= 0);
+        assertTrue(firstArgsDeltaIndex > itemAddedIndex);
+        assertEquals("call_1", functionCall.get("call_id").asText());
+        assertEquals("exec_command", functionCall.get("name").asText());
+        assertEquals("{\"cmd\":\"pwd\"}", functionCall.get("arguments").asText());
+    }
+
+    @Test
+    void streamResponseCompletesWhenChatStreamEndsWithoutDoneAndPreservesUsage() throws Exception {
+        List<ServerSentEvent<String>> events = converter.convertStreamResponse(Flux.just(
+                sse("{\"choices\":[{\"delta\":{\"content\":\"Done.\"}}]}"),
+                sse("{\"choices\":[],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5}}")
+        )).collectList().block();
+
+        assertNotNull(events);
+        JsonNode completed = findEvent(events, "response.completed");
+
+        assertEquals("completed", completed.get("response").get("status").asText());
+        assertEquals(3, completed.get("response").get("usage").get("input_tokens").asInt());
+        assertEquals(2, completed.get("response").get("usage").get("output_tokens").asInt());
+        assertEquals(5, completed.get("response").get("usage").get("total_tokens").asInt());
+    }
+
     private ServerSentEvent<String> sse(String data) {
         return ServerSentEvent.<String>builder().data(data).build();
     }
@@ -266,5 +302,31 @@ class ResponsesToOpenAiChatConverterTest {
             }
         }
         throw new AssertionError("Missing done item with type " + type);
+    }
+
+    private JsonNode findEvent(List<ServerSentEvent<String>> events, String eventType) throws Exception {
+        for (ServerSentEvent<String> event : events) {
+            if (eventType.equals(event.event()) && event.data() != null) {
+                return mapper.readTree(event.data());
+            }
+        }
+        throw new AssertionError("Missing event with type " + eventType);
+    }
+
+    private int indexOfEvent(List<ServerSentEvent<String>> events, String eventType, String itemType) throws Exception {
+        for (int i = 0; i < events.size(); i++) {
+            ServerSentEvent<String> event = events.get(i);
+            if (!eventType.equals(event.event()) || event.data() == null) {
+                continue;
+            }
+            if (itemType == null) {
+                return i;
+            }
+            JsonNode item = mapper.readTree(event.data()).get("item");
+            if (item != null && itemType.equals(item.path("type").asText())) {
+                return i;
+            }
+        }
+        return -1;
     }
 }
