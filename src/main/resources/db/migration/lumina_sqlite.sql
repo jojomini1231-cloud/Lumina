@@ -36,16 +36,21 @@ CREATE TABLE IF NOT EXISTS `settings` (
 CREATE TABLE IF NOT EXISTS `api_keys` (
   `id` INTEGER PRIMARY KEY AUTOINCREMENT,
   `name` TEXT NOT NULL,
+  `key_group` TEXT NOT NULL DEFAULT '自用',
   `api_key` TEXT NOT NULL UNIQUE,
   `is_enabled` INTEGER NOT NULL DEFAULT 1,
   `expired_at` INTEGER,
   `max_amount` REAL,
+  `max_requests` INTEGER,
+  `max_concurrent_requests` INTEGER,
+  `request_limit_reset_at` INTEGER,
   `supported_models` TEXT,
   `created_at` DATETIME NOT NULL DEFAULT (datetime('now')),
   `updated_at` DATETIME NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS `idx_api_keys_enabled` ON `api_keys` (`is_enabled`);
+CREATE INDEX IF NOT EXISTS `idx_api_keys_key_group` ON `api_keys` (`key_group`);
 
 -- ----------------------------
 -- Table: providers

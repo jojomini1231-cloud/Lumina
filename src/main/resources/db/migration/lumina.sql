@@ -43,15 +43,20 @@ DROP TABLE IF EXISTS `api_keys`;
 CREATE TABLE `api_keys` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'API密钥ID',
   `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '密钥名称',
+  `key_group` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '自用' COMMENT '密钥分组',
   `api_key` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'API密钥值',
   `is_enabled` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用：0-禁用，1-启用',
   `expired_at` bigint DEFAULT NULL COMMENT '过期时间戳（秒），NULL表示永不过期',
   `max_amount` decimal(10,4) DEFAULT NULL COMMENT '最大消费额度，NULL表示无限制',
+  `max_requests` bigint DEFAULT NULL COMMENT '最大请求数，NULL表示无限制',
+  `max_concurrent_requests` bigint DEFAULT NULL COMMENT '最大API请求并发量，NULL表示无限制',
+  `request_limit_reset_at` bigint DEFAULT NULL COMMENT '请求数限制重置时间戳（秒），NULL表示未重置',
   `supported_models` text COLLATE utf8mb4_unicode_ci COMMENT '支持的模型列表（逗号分隔），NULL表示无限制',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_api_key` (`api_key`),
+  KEY `idx_key_group` (`key_group`),
   KEY `idx_enabled` (`is_enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='API密钥表';
 
