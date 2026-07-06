@@ -29,6 +29,14 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(503, "所有可用节点已尝试，服务暂时不可用"));
     }
 
+    @ExceptionHandler(ApiKeyConcurrencyLimitExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleApiKeyConcurrencyLimitExceededException(ApiKeyConcurrencyLimitExceededException ex) {
+        log.warn("API key concurrency limit exceeded: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(ApiResponse.error(429, ex.getMessage()));
+    }
+
     @ExceptionHandler(WebExchangeBindException.class)
     public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationExceptions(
             WebExchangeBindException ex) {

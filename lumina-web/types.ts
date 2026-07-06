@@ -91,6 +91,7 @@ export interface ModelPrice {
 export interface AccessToken {
   id: string;
   name: string;
+  keyGroup?: string;
   token?: string; // Only present on creation response
   maskedToken: string;
   lastUsedAt?: string;
@@ -98,7 +99,12 @@ export interface AccessToken {
   status: 'active' | 'revoked';
   expiredAt?: number | null; // Unix timestamp in seconds, null = never expires
   maxAmount?: number | null; // USD spending limit, null = unlimited
+  maxRequests?: number | null; // Request count limit, null = unlimited
+  maxConcurrentRequests?: number | null; // Concurrent request limit, null = unlimited
+  requestLimitResetAt?: number | null; // Unix timestamp in seconds, null = never reset
+  supportedModels?: string[]; // Empty means all model groups are allowed
   totalRequests?: number;
+  requestLimitUsed?: number;
   successRequests?: number;
   totalInputTokens?: number;
   totalOutputTokens?: number;

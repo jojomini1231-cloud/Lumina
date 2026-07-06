@@ -46,7 +46,7 @@ public class ApiKeyController {
         if (apiKeyRequest.getName() == null || apiKeyRequest.getName().trim().isEmpty()) {
             throw new IllegalArgumentException("Name is required");
         }
-        ApiKey apiKey = apiKeyService.generateApiKey(apiKeyRequest.getName());
+        ApiKey apiKey = apiKeyService.generateApiKey(apiKeyRequest.getName(), apiKeyRequest.getKeyGroup());
         return ApiResponse.success(apiKey);
     }
 
@@ -130,7 +130,13 @@ public class ApiKeyController {
     public ApiResponse<ApiKey> updateApiKeyQuota(
             @PathVariable Long id,
             @RequestBody(required = false) ApiKeyQuotaUpdateRequest request) {
-        ApiKey apiKey = apiKeyService.updateMaxAmount(id, request != null ? request.getMaxAmount() : null);
+        ApiKey apiKey = apiKeyService.updateQuota(
+                id,
+                request != null ? request.getMaxAmount() : null,
+                request != null ? request.getMaxRequests() : null,
+                request != null ? request.getMaxConcurrentRequests() : null,
+                request != null ? request.getSupportedModels() : null,
+                request != null ? request.getKeyGroup() : null);
         return ApiResponse.success(apiKey);
     }
 
@@ -140,6 +146,34 @@ public class ApiKeyController {
         return ApiResponse.success(usageList);
     }
 
+    @GetMapping("/usage/page")
+    public ApiResponse<Page<ApiKeyUsageDto>> getApiKeyUsagePage(
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "10") Integer size,
+            @RequestParam(required = false) Boolean isEnabled,
+            @RequestParam(required = false) String keyGroup,
+            @RequestParam(required = false) String keyword) {
+        int safeCurrent = current == null || current < 1 ? 1 : current;
+        int safeSize = size == null || size < 1 ? 10 : Math.min(size, 100);
+        long offset = (long) (safeCurrent - 1) * safeSize;
+
+        String groupFilter = StringUtils.hasText(keyGroup) ? keyGroup.trim() : null;
+        String keywordFilter = StringUtils.hasText(keyword) ? keyword.trim() : null;
+        List<ApiKeyUsageDto> records = apiKeyMapper.selectApiKeyUsagePage(isEnabled, groupFilter, keywordFilter, offset, safeSize);
+        Long total = apiKeyMapper.countApiKeyUsage(isEnabled, groupFilter, keywordFilter);
+
+        Page<ApiKeyUsageDto> page = new Page<>(safeCurrent, safeSize);
+        page.setRecords(records);
+        page.setTotal(total != null ? total : 0);
+        return ApiResponse.success(page);
+    }
+
+    @GetMapping("/groups")
+    public ApiResponse<List<String>> getApiKeyGroups(@RequestParam(required = false) Boolean isEnabled) {
+        List<String> groups = apiKeyMapper.selectApiKeyGroups(isEnabled);
+        return ApiResponse.success(groups);
+    }
+
     @GetMapping("/usage/{apiKey}")
     public ApiResponse<ApiKeyUsageDto> getApiKeyUsage(@PathVariable String apiKey) {
         ApiKeyUsageDto usage = apiKeyMapper.selectApiKeyUsageByKey(apiKey);
@@ -147,5 +181,11 @@ public class ApiKeyController {
             throw new IllegalArgumentException("ApiKey not found: " + apiKey);
         }
         return ApiResponse.success(usage);
+    }
+
+    @PutMapping("/{id}/request-limit/reset")
+    public ApiResponse<ApiKey> resetApiKeyRequestLimit(@PathVariable Long id) {
+        ApiKey apiKey = apiKeyService.resetRequestLimit(id);
+        return ApiResponse.success(apiKey);
     }
 }

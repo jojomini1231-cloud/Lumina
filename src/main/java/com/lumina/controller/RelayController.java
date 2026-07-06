@@ -37,11 +37,13 @@ public class RelayController {
     }
 
     @GetMapping("/v1/models")
-    public Mono<ResponseEntity<?>> models() {
-        return relayService.models();
+    public Mono<ResponseEntity<?>> models(ServerWebExchange exchange) {
+        String apiKey = exchange.getAttribute("API_KEY");
+        return relayService.models(apiKey);
     }
 
     @PostMapping("/v1/messages")
+
     public Mono<ResponseEntity<?>> createMessage(
             @RequestBody ObjectNode params,
             @RequestParam Map<String, String> allParams,

@@ -11,10 +11,14 @@ public class ApiKey {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String name;
+    private String keyGroup;
     private String apiKey;
     private Boolean isEnabled;
     private Long expiredAt;
     private BigDecimal maxAmount;
+    private Long maxRequests;
+    private Long maxConcurrentRequests;
+    private Long requestLimitResetAt;
     private String supportedModels;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

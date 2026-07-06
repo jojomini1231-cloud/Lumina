@@ -14,6 +14,7 @@ import com.lumina.entity.Group;
 import com.lumina.entity.LlmModel;
 import com.lumina.service.FailoverService;
 import com.lumina.service.GroupService;
+import com.lumina.service.ApiKeyService;
 import com.lumina.service.LlmModelService;
 import com.lumina.service.LlmRequestExecutor;
 import com.lumina.service.RelayService;
@@ -24,6 +25,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -32,6 +34,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -39,6 +43,9 @@ public class RelayServiceImpl implements RelayService {
 
     @Autowired
     private GroupService groupService;
+
+    @Autowired
+    private ApiKeyService apiKeyService;
 
     @Autowired
     private FailoverService failoverService;
@@ -71,7 +78,8 @@ public class RelayServiceImpl implements RelayService {
             enrichedParams.put("_lumina_api_key", apiKey);
         }
         enrichedParams.put("_lumina_request_model", modelGroupName);
-        return groupService.getModelGroupConfigAsync(modelGroupName)
+        return ensureModelAllowed(apiKey, modelGroupName)
+                .then(groupService.getModelGroupConfigAsync(modelGroupName))
                 .switchIfEmpty(Mono.defer(() -> {
                     log.warn("Model group not found: modelGroupName={}, requestType={}, requestIp={}",
                             modelGroupName, type, enrichedParams.get("_lumina_request_ip"));
@@ -165,7 +173,8 @@ public class RelayServiceImpl implements RelayService {
         }
         enrichedParams.put("_lumina_request_model", modelGroupName);
 
-        return groupService.getModelGroupConfigAsync(modelGroupName)
+        return ensureModelAllowed(apiKey, modelGroupName)
+                .then(groupService.getModelGroupConfigAsync(modelGroupName))
                 .switchIfEmpty(Mono.error(new RuntimeException("模型分组不存在")))
                 .flatMap(modelGroupConfig -> {
                     if (modelGroupConfig == null) {
@@ -219,14 +228,21 @@ public class RelayServiceImpl implements RelayService {
     }
 
     @Override
-    public Mono<ResponseEntity<?>> models() {
+    public Mono<ResponseEntity<?>> models(String apiKey) {
         return Mono.fromCallable(groupService::list)
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(groups -> {
+                    List<String> supportedModels = apiKeyService.getSupportedModelList(apiKey);
+                    Set<String> allowedModels = supportedModels.isEmpty()
+                            ? null
+                            : supportedModels.stream().collect(Collectors.toSet());
                     ArrayNode dataArray = objectMapper.createArrayNode();
                     long createdTimestamp = Instant.now().getEpochSecond();
 
                     for (Group group : groups) {
+                        if (allowedModels != null && !allowedModels.contains(group.getName())) {
+                            continue;
+                        }
                         LlmModel model = llmModelService.findLatestByModelName(group.getName());
                         ObjectNode node = objectMapper.createObjectNode();
                         node.put("id", group.getName());
@@ -244,6 +260,16 @@ public class RelayServiceImpl implements RelayService {
 
                     return ResponseEntity.ok(response);
                 });
+    }
+
+    private Mono<Void> ensureModelAllowed(String apiKey, String modelGroupName) {
+        if (!StringUtils.hasText(apiKey)) {
+            return Mono.empty();
+        }
+        return apiKeyService.canAccessModel(apiKey, modelGroupName)
+                .flatMap(allowed -> allowed
+                        ? Mono.empty()
+                        : Mono.error(new IllegalArgumentException("API key is not allowed to access model: " + modelGroupName)));
     }
 
     /**
