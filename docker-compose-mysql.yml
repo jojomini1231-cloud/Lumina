@@ -32,6 +32,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: lumina
       SPRING_DATA_REDIS_HOST: 127.0.0.1
       SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: redis123
     depends_on:
       mysql:
         condition: service_healthy

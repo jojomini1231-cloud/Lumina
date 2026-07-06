@@ -19,9 +19,10 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://${LUMINA_MYSQL_HOST:-127.0.0.1}:${LUMINA_MYSQL_PORT:-3306}/${LUMINA_MYSQL_DB:-lumina}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: ${LUMINA_MYSQL_USER:-root}
       SPRING_DATASOURCE_PASSWORD: ${LUMINA_MYSQL_PASSWORD:-root123}
+      SERVER_PORT: ${APP_PORT:-8080}
       # 复用宿主机 Redis；如果没有运行，startup.sh 会启动容器内 Redis。
       SPRING_DATA_REDIS_HOST: ${LUMINA_REDIS_HOST:-127.0.0.1}
       SPRING_DATA_REDIS_PORT: ${LUMINA_REDIS_PORT:-6379}
-      SPRING_DATA_REDIS_PASSWORD: ${LUMINA_REDIS_PASSWORD:-}
+      SPRING_DATA_REDIS_PASSWORD: ${LUMINA_REDIS_PASSWORD:-redis123}
     volumes:
       - ${LUMINA_DATA_DIR:-/home/jojo/docker-data/lumina}/logs:/app/logs

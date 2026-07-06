@@ -10,6 +10,7 @@ MYSQL_USER="${LUMINA_MYSQL_USER:-root}"
 MYSQL_PASSWORD="${LUMINA_MYSQL_PASSWORD:-root123}"
 REDIS_HOST="${LUMINA_REDIS_HOST:-127.0.0.1}"
 REDIS_PORT="${LUMINA_REDIS_PORT:-6379}"
+REDIS_PASSWORD="${LUMINA_REDIS_PASSWORD:-redis123}"
 DATA_DIR="${LUMINA_DATA_DIR:-/home/jojo/docker-data/lumina}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 
@@ -64,6 +65,19 @@ check_tcp() {
   timeout 3 bash -c ":</dev/tcp/${host}/${port}" >/dev/null 2>&1
 }
 
+check_app_port() {
+  if ! check_tcp 127.0.0.1 "$APP_PORT"; then
+    return
+  fi
+
+  if docker ps --filter "name=^/${APP_NAME}$" --filter "status=running" --format '{{.Names}}' | grep -qx "$APP_NAME"; then
+    log "应用端口 ${APP_PORT} 当前由已有 ${APP_NAME} 容器占用，将由 compose 重建替换"
+    return
+  fi
+
+  fail "应用端口 ${APP_PORT} 已被占用。请先停止占用进程，或使用 APP_PORT=其他端口 部署"
+}
+
 prepare_directories() {
   mkdir -p "$DATA_DIR/logs"
   log "已准备数据目录：$DATA_DIR"
@@ -94,6 +108,18 @@ prepare_mysql() {
 check_redis() {
   log "检查 Redis：${REDIS_HOST}:${REDIS_PORT}"
 
+  if has_cmd redis-cli; then
+    if [ -n "$REDIS_PASSWORD" ]; then
+      if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" --no-auth-warning ping 2>/dev/null | grep -q PONG; then
+        log "Redis 连接正常"
+        return
+      fi
+    elif redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping 2>/dev/null | grep -q PONG; then
+      log "Redis 连接正常"
+      return
+    fi
+  fi
+
   if has_cmd redis-cli && redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping 2>/dev/null | grep -q PONG; then
     log "Redis 连接正常"
     return
@@ -116,7 +142,9 @@ deploy_app() {
   export LUMINA_MYSQL_PASSWORD="$MYSQL_PASSWORD"
   export LUMINA_REDIS_HOST="$REDIS_HOST"
   export LUMINA_REDIS_PORT="$REDIS_PORT"
+  export LUMINA_REDIS_PASSWORD="$REDIS_PASSWORD"
   export LUMINA_DATA_DIR="$DATA_DIR"
+  export APP_PORT="$APP_PORT"
 
   compose up -d --build
   log "Docker Compose 启动完成"
@@ -153,6 +181,7 @@ main() {
   prepare_directories
   prepare_mysql
   check_redis
+  check_app_port
   deploy_app
   wait_for_app
   show_status
